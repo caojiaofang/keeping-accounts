@@ -5,7 +5,8 @@
     { "path": "pages/books/index", "style": { "navigationBarTitleText": "我的账本" } },
     { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/record/index", "style": { "navigationBarTitleText": "记一笔", "disableScroll": true } },
-    { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "墨记助手", "disableScroll": true } }
+    { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "墨记助手", "disableScroll": true } },
+    { "path": "pages/calendar/index", "style": { "navigationBarTitleText": "消费日历" } }
   ],
   "globalStyle": {
     "navigationStyle": "custom",

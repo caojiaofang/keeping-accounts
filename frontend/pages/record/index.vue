@@ -6,6 +6,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { categories } from '@/common/mock'
 import { localDate, toast } from '@/common/format'
+import { isCalendarDate } from '@/common/expense-calendar'
 import type { EntryType } from '@/common/types'
 
 const store = useLedgerStore()
@@ -26,7 +27,10 @@ const activeBook = computed(() => store.books.find(book => book.id === bookId.va
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 
 onLoad((options) => {
-  if (!options?.id) return
+  if (!options?.id) {
+    if (options?.date && isCalendarDate(options.date)) date.value = options.date
+    return
+  }
   const entry = store.entries.find(item => item.id === options.id)
   if (!entry) { toast('这笔账单不存在'); return }
   editingId.value = entry.id

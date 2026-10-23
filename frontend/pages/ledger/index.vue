@@ -43,6 +43,7 @@ function saveBudget(value: string) {
 }
 function viewStats() { uni.redirectTo({ url: '/pages/statistics/index' }) }
 function openAssistant(mode: string) { uni.navigateTo({ url: `/pages/assistant/index?mode=${mode}` }) }
+function openCalendar() { uni.navigateTo({ url: '/pages/calendar/index' }) }
 </script>
 
 <template>
@@ -69,7 +70,7 @@ function openAssistant(mode: string) { uni.navigateTo({ url: `/pages/assistant/i
     </button>
 
     <view class="assistant-entries"><button class="assistant-entry" @tap="openAssistant('record')"><view class="assistant-entry-icon"><AppIcon name="edit" :size="34" /></view><view><text class="assistant-entry-title">一句话记账</text><text class="assistant-entry-copy">随手说一句，轻松记好</text></view><AppIcon name="chevron" :size="23" /></button><view class="assistant-entry-divider" /><button class="assistant-entry" @tap="openAssistant('chat')"><view class="assistant-entry-icon"><AppIcon name="chart" :size="34" /></view><view><text class="assistant-entry-title">聊聊花费</text><text class="assistant-entry-copy">看看钱都花在哪儿了</text></view><AppIcon name="chevron" :size="23" /></button></view>
-    <view class="section-head ledger-heading"><view class="row"><text class="section-title">收支明细</text><text class="entry-count">{{ filteredEntries.length }} 笔</text></view><view class="tools"><button class="tool-button" aria-label="搜索账单" @tap="searching = !searching; keyword = ''"><AppIcon name="search" :size="35" /></button><button class="tool-button" aria-label="筛选分类" @tap="chooseCategory"><AppIcon name="filter" :size="37" /><view v-if="categoryFilter" class="filter-dot" /></button></view></view>
+    <view class="section-head ledger-heading"><view class="row"><text class="section-title">收支明细</text><text class="entry-count">{{ filteredEntries.length }} 笔</text></view><view class="tools"><button class="calendar-shortcut" aria-label="消费日历" @tap="openCalendar"><AppIcon name="calendar" :size="30" /><text>日历</text></button><button class="tool-button" aria-label="搜索账单" @tap="searching = !searching; keyword = ''"><AppIcon name="search" :size="35" /></button><button class="tool-button" aria-label="筛选分类" @tap="chooseCategory"><AppIcon name="filter" :size="37" /><view v-if="categoryFilter" class="filter-dot" /></button></view></view>
 
     <view v-if="searching" class="search-box"><AppIcon name="search" :size="30" /><input v-model="keyword" placeholder="搜索备注、分类或账户" class="search-input" /><button aria-label="关闭搜索" @tap="searching = false; keyword = ''"><AppIcon name="close" :size="28" /></button></view>
     <view class="filter-row"><view class="filter-tabs"><button v-for="tab in filterTabs" :key="tab.key" class="filter-tab" :class="{ active: filter === tab.key }" @tap="setFilter(tab.key)">{{ tab.label }}</button></view><button v-if="categoryFilter" class="category-tag" @tap="categoryFilter = ''">{{ store.categoryOf(categoryFilter).name }} ×</button><text v-else class="filter-hint">每一笔，都是生活</text></view>
@@ -114,6 +115,7 @@ function openAssistant(mode: string) { uni.navigateTo({ url: `/pages/assistant/i
 .assistant-entry-divider { width: 1rpx; height: 54rpx; background: #dce6dc; }
 .entry-count { font-size: 21rpx; color: #8e9c93; margin-left: 16rpx; }
 .tools { display: flex; gap: 20rpx; }
+.calendar-shortcut { display: flex; align-items: center; gap: 6rpx; font-size: 23rpx; color: #69866f; }
 .tool-button { position: relative; width: 43rpx; height: 43rpx; display: flex; align-items: center; justify-content: center; }
 .filter-dot { position: absolute; width: 10rpx; height: 10rpx; background: #b77e47; right: 0; top: 0; border-radius: 50%; }
 .filter-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; }

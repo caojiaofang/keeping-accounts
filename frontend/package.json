@@ -10,6 +10,7 @@
     "build:h5": "node scripts/uni.mjs build h5",
     "type-check": "vue-tsc --noEmit",
     "check:assistant": "node scripts/check-assistant.mjs",
+    "check:calendar": "node scripts/check-calendar.mjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

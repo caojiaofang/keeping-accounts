@@ -4,7 +4,7 @@ import type { Entry } from '@/common/types'
 import { useLedgerStore } from '@/store/ledger'
 import { dateLabel, money } from '@/common/format'
 import AppIcon from './AppIcon.vue'
-const props = defineProps<{ entries: Entry[] }>()
+const props = withDefaults(defineProps<{ entries: Entry[]; showDateHeadings?: boolean }>(), { showDateHeadings: true })
 const store = useLedgerStore()
 const groups = computed(() => {
   const dates = [...new Set(props.entries.map(entry => entry.date))].sort().reverse()
@@ -25,7 +25,7 @@ function add() { uni.navigateTo({ url: '/pages/record/index' }) }
     <button class="secondary-button" @tap="add">记第一笔</button>
   </view>
   <view v-for="group in groups" :key="group.date" class="day-group">
-    <view class="day-heading"><text>{{ dateLabel(group.date) }}</text><view class="day-totals"><text v-if="group.expense">支出 {{ money(group.expense) }}</text><text v-if="group.income">收入 {{ money(group.income) }}</text></view></view>
+    <view v-if="showDateHeadings" class="day-heading"><text>{{ dateLabel(group.date) }}</text><view class="day-totals"><text v-if="group.expense">支出 {{ money(group.expense) }}</text><text v-if="group.income">收入 {{ money(group.income) }}</text></view></view>
     <view class="entries-panel">
       <button v-for="entry in group.entries" :key="entry.id" class="entry" @tap="edit(entry.id)">
         <view class="category-icon" :style="{ background: store.categoryOf(entry.categoryId).color }"><AppIcon :name="store.categoryOf(entry.categoryId).icon" :size="39" /></view>
