@@ -1,0 +1,17 @@
+{
+  "pages": [
+    { "path": "pages/ledger/index", "style": { "navigationBarTitleText": "墨记" } },
+    { "path": "pages/statistics/index", "style": { "navigationBarTitleText": "收支统计" } },
+    { "path": "pages/books/index", "style": { "navigationBarTitleText": "我的账本" } },
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/record/index", "style": { "navigationBarTitleText": "记一笔", "disableScroll": true } },
+    { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "墨记助手", "disableScroll": true } }
+  ],
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#f6f8f7",
+    "backgroundColor": "#f6f8f7",
+    "backgroundTextStyle": "dark"
+  }
+}

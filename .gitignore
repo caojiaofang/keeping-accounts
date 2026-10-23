@@ -1,0 +1,36 @@
+# 本地配置与密钥
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+*.pem
+*.key
+
+# 前端依赖与构建产物
+node_modules/
+unpackage/
+dist/
+coverage/
+.hbuilderx/
+
+# 辅助预览、自动化和验收产物
+output/
+.playwright-cli/
+*.log
+
+# Python 环境与缓存
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 编辑器与系统文件
+.idea/
+.DS_Store
+Thumbs.db

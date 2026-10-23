@@ -1,0 +1,54 @@
+page {
+  background: #f6f8f7;
+  color: #203c35;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 28rpx;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+view, text, button, input, textarea, scroll-view, uni-button { box-sizing: border-box; }
+button[class] { margin: 0; padding: 0; font-family: inherit; font-size: inherit; line-height: inherit; border-radius: 0; background: transparent; color: inherit; }
+button[class]::after { border: 0; }
+button[disabled], uni-button[disabled] { background: #dce4df; color: #74877d; }
+button:active, uni-button:active { opacity: .7; }
+input, textarea { font-family: inherit; color: #203c35; }
+.page { min-height: 100vh; padding: 0 36rpx calc(180rpx + env(safe-area-inset-bottom)); }
+.page-plain { padding-bottom: 40rpx; }
+.row { display: flex; align-items: center; }
+.between { display: flex; align-items: center; justify-content: space-between; }
+.muted { color: #8a9791; }
+.small { font-size: 23rpx; }
+.number { font-family: 'DIN Alternate', 'Arial', sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.5rpx; }
+.section-head { display: flex; align-items: center; justify-content: space-between; margin: 42rpx 0 24rpx; }
+.section-title { font-size: 32rpx; font-weight: 600; letter-spacing: 1rpx; }
+button.text-button { color: #648074; font-size: 24rpx; padding: 8rpx 0 8rpx 16rpx; display: flex; align-items: center; }
+button.icon-button { display: flex; align-items: center; justify-content: center; width: 68rpx; height: 68rpx; border-radius: 50%; background: #fff; }
+.panel { background: #fff; border-radius: 28rpx; }
+button.primary-button { display: flex; justify-content: center; align-items: center; gap: 12rpx; height: 96rpx; background: #285e4e; color: #fff; border-radius: 24rpx; font-weight: 600; }
+button.secondary-button { display: flex; justify-content: center; align-items: center; height: 88rpx; background: #edf3ef; border-radius: 22rpx; color: #39624e; }
+.pill { padding: 8rpx 18rpx; border-radius: 99rpx; color: #537061; background: #edf4ef; font-size: 21rpx; }
+.chevron { color: #94a298; font-size: 36rpx; }
+.divider { height: 1rpx; background: #edf1ee; }
+.empty { padding: 68rpx 20rpx; text-align: center; color: #8a9791; }
+.empty-mark { display: flex; justify-content: center; align-items: center; width: 112rpx; height: 112rpx; border-radius: 32rpx; background: #e9f1ec; margin: 0 auto 24rpx; }
+.empty-title { color: #526b5e; font-size: 29rpx; margin-bottom: 12rpx; }
+.empty .secondary-button { margin: 30rpx auto 0; width: 240rpx; }
+.footnote { text-align: center; color: #9ba69f; font-size: 22rpx; padding: 32rpx 0; letter-spacing: 2rpx; }
+.sheet-mask { position: fixed; inset: 0; background: rgba(20, 42, 33, .36); z-index: 60; display: flex; align-items: flex-end; }
+.sheet { width: 100%; background: #fff; padding: 18rpx 36rpx calc(36rpx + env(safe-area-inset-bottom)); border-radius: 36rpx 36rpx 0 0; }
+.sheet-handle { width: 64rpx; height: 7rpx; border-radius: 6rpx; background: #dce5df; margin: 0 auto 28rpx; }
+.sheet-title { font-size: 34rpx; font-weight: 600; margin-bottom: 12rpx; }
+.sheet-description { font-size: 25rpx; color: #86958b; margin-bottom: 30rpx; }
+.sheet-input { background: #f4f7f5; height: 100rpx; border-radius: 18rpx; padding: 0 24rpx; margin: 26rpx 0 30rpx; }
+.form-row { min-height: 104rpx; display: flex; align-items: center; gap: 20rpx; border-bottom: 1rpx solid #edf1ee; }
+.form-label { font-size: 26rpx; color: #839188; }
+.form-value { flex: 1; text-align: right; font-size: 27rpx; }
+.badge-dot { width: 10rpx; height: 10rpx; border-radius: 50%; display: inline-block; background: #4e8c70; margin-right: 10rpx; }
+/* H5 只用于辅助检查；微信小程序使用全屏原生布局。 */
+/* #ifdef H5 */
+@media (min-width: 700px) {
+  body { background: #e8eeea; }
+  uni-page-body { max-width: 480px; margin: 0 auto; background: #f6f8f7; }
+  .bottom-nav, .sheet-mask { max-width: 480px; left: 50% !important; transform: translateX(-50%); }
+}
+/* #endif */

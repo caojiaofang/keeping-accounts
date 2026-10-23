@@ -1,0 +1,28 @@
+{
+    "name" : "墨记",
+    "appid" : "__UNI__1B296FD",
+    "description" : "把日子，一笔一笔记好。",
+    "versionName" : "0.1.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "vueVersion" : "3",
+    "mp-weixin" : {
+        "appid" : "wx0f90babab478b2b6",
+        "setting" : {
+            "urlCheck" : true,
+            "es6" : true,
+            "minified" : true
+        },
+        "usingComponents" : true,
+        "lazyCodeLoading" : "requiredComponents"
+    },
+    "h5" : {
+        "title" : "墨记",
+        "router" : {
+            "mode" : "hash"
+        }
+    },
+    "uniStatistics" : {
+        "enable" : false
+    }
+}
