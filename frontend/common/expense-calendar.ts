@@ -1,5 +1,7 @@
-import type { Entry } from './types'
+import type { Entry, EntryType } from './types'
 import { localDate } from './format'
+
+export type CalendarMode = 'all' | EntryType
 
 export interface ExpenseCalendarDay {
   date: string
@@ -11,6 +13,7 @@ export interface ExpenseCalendarDay {
   expenseCount: number
   incomeCount: number
   level: number
+  incomeLevel: number
 }
 
 export function isCalendarMonth(month: string): boolean {
@@ -40,6 +43,10 @@ export function calendarAmount(cents: number): string {
   return String(Number((cents / 100).toFixed(2)))
 }
 
+export function filterCalendarEntries(entries: readonly Entry[], bookId: string, date: string, mode: CalendarMode): Entry[] {
+  return entries.filter(entry => entry.bookId === bookId && entry.date === date && (mode === 'all' || entry.type === mode))
+}
+
 export function buildExpenseCalendar(month: string, entries: readonly Entry[], bookId: string, today = localDate()) {
   if (!isCalendarMonth(month)) throw new Error('请选择2000年至2100年之间的月份')
   const [year, value] = month.split('-').map(Number)
@@ -53,10 +60,11 @@ export function buildExpenseCalendar(month: string, entries: readonly Entry[], b
     totals.set(entry.date, total)
   })
   const maximum = Math.max(0, ...[...totals.values()].map(total => total.expense))
+  const maximumIncome = Math.max(0, ...[...totals.values()].map(total => total.income))
   const days: ExpenseCalendarDay[] = Array.from({ length: 42 }, (_, index) => {
     const date = localDate(new Date(year, value - 1, index - offset + 1, 12))
     const total = totals.get(date) || { expense: 0, income: 0, expenseCount: 0, incomeCount: 0 }
-    return { date, day: Number(date.slice(8)), inMonth: date.startsWith(month), isToday: date === today, ...total, level: total.expense ? Math.min(3, Math.ceil(total.expense / maximum * 3)) : 0 }
+    return { date, day: Number(date.slice(8)), inMonth: date.startsWith(month), isToday: date === today, ...total, level: total.expense ? Math.min(3, Math.ceil(total.expense / maximum * 3)) : 0, incomeLevel: total.income ? Math.min(3, Math.ceil(total.income / maximumIncome * 3)) : 0 }
   })
   const monthDays = days.filter(day => day.inMonth)
   return {
@@ -64,6 +72,8 @@ export function buildExpenseCalendar(month: string, entries: readonly Entry[], b
     expense: monthDays.reduce((sum, day) => sum + day.expense, 0),
     income: monthDays.reduce((sum, day) => sum + day.income, 0),
     expenseDays: monthDays.filter(day => day.expenseCount > 0).length,
+    incomeDays: monthDays.filter(day => day.incomeCount > 0).length,
     peakDay: monthDays.find(day => day.expense > 0 && day.expense === maximum),
+    peakIncomeDay: monthDays.find(day => day.income > 0 && day.income === maximumIncome),
   }
 }

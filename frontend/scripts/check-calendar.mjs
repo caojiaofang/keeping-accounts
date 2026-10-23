@@ -6,7 +6,7 @@ const toUrl = source => `data:text/javascript;base64,${Buffer.from(source).toStr
 const transpile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
 const formatUrl = toUrl(transpile(await readFile(new URL('../common/format.ts', import.meta.url), 'utf8')))
 const compiled = transpile(await readFile(new URL('../common/expense-calendar.ts', import.meta.url), 'utf8'))
-const { buildExpenseCalendar, calendarAmount, selectedDateInMonth, isCalendarDate, isCalendarMonth } = await import(toUrl(compiled.replace(/from (['"])\.\/format\1/g, `from '${formatUrl}'`)))
+const { buildExpenseCalendar, calendarAmount, filterCalendarEntries, selectedDateInMonth, isCalendarDate, isCalendarMonth } = await import(toUrl(compiled.replace(/from (['"])\.\/format\1/g, `from '${formatUrl}'`)))
 const entry = (id, date, amount, type = 'expense', bookId = 'test') => ({ id, date, amount, type, bookId, categoryId: 'food', note: id, account: '微信', createdAt: 1 })
 const today = '2026-10-23'
 const records = [entry('早餐', today, 800), entry('午餐', today, 2550), entry('收入', today, 100000, 'income'), entry('昨天', '2026-10-22', 100), entry('上月', '2026-09-23', 99999), entry('其他账本', today, 900000, 'expense', 'other'), entry('无效日期', '2026-10-32', 50000)]
@@ -51,10 +51,30 @@ check('仅收入日期不算支出日，不产生消费热度', () => {
   assert.equal(calendar.expenseDays, 0)
   assert.equal(calendar.peakDay, undefined)
   assert.equal(calendar.days.find(day => day.date === today).level, 0)
+  assert.equal(calendar.days.find(day => day.date === today).incomeLevel, 3)
+  assert.equal(calendar.incomeDays, 1)
+  assert.equal(calendar.peakIncomeDay.date, today)
+})
+check('收入独立汇总，单独计算最高收入日与热度', () => {
+  const calendar = buildExpenseCalendar('2026-10', [...records, entry('奖金', '2026-10-21', 300000, 'income')], 'test', today)
+  assert.equal(calendar.income, 400000)
+  assert.equal(calendar.incomeDays, 2)
+  assert.equal(calendar.peakIncomeDay.date, '2026-10-21')
+  assert.equal(calendar.days.find(day => day.date === today).incomeLevel, 1)
+  assert.equal(calendar.expense, 3450)
+})
+check('同一天同时有收支时三种模式返回相应明细，保留原始数据', () => {
+  const all = filterCalendarEntries(records, 'test', today, 'all')
+  assert.equal(all.length, 3)
+  assert.deepEqual(filterCalendarEntries(records, 'test', today, 'expense').map(item => item.id), ['早餐', '午餐'])
+  assert.deepEqual(filterCalendarEntries(records, 'test', today, 'income').map(item => item.id), ['收入'])
+  assert.equal(records.length, 7)
+  assert.equal(filterCalendarEntries(records, 'other', today, 'income').length, 0)
 })
 check('空月份不出现最高消费日期或非零热度', () => {
   const calendar = buildExpenseCalendar('2026-10', [], 'test', today)
   assert.equal(calendar.peakDay, undefined)
+  assert.equal(calendar.peakIncomeDay, undefined)
   assert.ok(calendar.days.every(day => day.level === 0))
 })
 check('日期切换保持月内有效，月末自动夹到目标月最后一天', () => {

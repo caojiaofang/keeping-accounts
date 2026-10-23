@@ -29,6 +29,7 @@ const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 onLoad((options) => {
   if (!options?.id) {
     if (options?.date && isCalendarDate(options.date)) date.value = options.date
+    if (options?.type === 'income') changeType('income')
     return
   }
   const entry = store.entries.find(item => item.id === options.id)
