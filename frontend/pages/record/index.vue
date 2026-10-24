@@ -7,6 +7,7 @@ import { useLedgerStore } from '@/store/ledger'
 import { categories } from '@/common/mock'
 import { localDate, toast } from '@/common/format'
 import { isCalendarDate } from '@/common/expense-calendar'
+import { canEditEntry, entryAuthor } from '@/common/shared-books'
 import type { EntryType } from '@/common/types'
 
 const store = useLedgerStore()
@@ -22,6 +23,8 @@ const bookId = ref(store.activeBookId)
 const accounts = ['微信', '支付宝', '银行卡', '现金']
 const account = ref('微信')
 const saving = ref(false)
+const originalEntry = computed(() => store.entries.find(entry => entry.id === editingId.value))
+const recordedBy = computed(() => originalEntry.value ? entryAuthor(store.books.find(book => book.id === originalEntry.value!.bookId), originalEntry.value) : '我')
 const visibleCategories = computed(() => categories.filter(category => category.type === type.value))
 const activeBook = computed(() => store.books.find(book => book.id === bookId.value) || store.activeBook)
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
@@ -34,6 +37,7 @@ onLoad((options) => {
   }
   const entry = store.entries.find(item => item.id === options.id)
   if (!entry) { toast('这笔账单不存在'); return }
+  if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) { goBack(); toast('你可以查看共同账单，只有本人或创建者可以修改'); return }
   editingId.value = entry.id
   type.value = entry.type
   categoryId.value = entry.categoryId
@@ -71,13 +75,14 @@ function save() {
   const cents = Math.round(Number(amount.value) * 100)
   if (!Number.isFinite(cents) || cents <= 0) return toast('请输入大于 0 的金额')
   saving.value = true
-  store.saveEntry({ type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value }, editingId.value || undefined)
+  const saved = store.saveEntry({ type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value }, editingId.value || undefined)
+  if (!saved) { saving.value = false; return }
   goBack()
   toast(store.storageAvailable ? (editingId.value ? '账单已更新' : '已记下这一笔') : '已记下，本地空间不足，仅本次运行保留')
 }
 function remove() {
   uni.showModal({ title: '删除这笔账单？', content: '删除后，本地记录和统计将同步更新。', confirmText: '删除', confirmColor: '#ae674e', success: result => {
-    if (result.confirm) { store.deleteEntry(editingId.value); goBack(); toast('账单已删除') }
+    if (result.confirm && store.deleteEntry(editingId.value)) { goBack(); toast('账单已删除') }
   } })
 }
 </script>
@@ -96,7 +101,8 @@ function remove() {
           <picker mode="date" :value="date" start="2000-01-01" end="2100-12-31" @change="changeDate"><view class="form-row"><AppIcon name="calendar" :size="33" /><text class="form-label">日期</text><text class="form-value">{{ date === localDate() ? '今天' : date }}</text><AppIcon name="chevron" :size="23" /></view></picker>
           <view class="form-row"><AppIcon name="calendar" :size="33" /><text class="form-label">时间</text><picker class="record-time" mode="time" :value="time || '08:00'" @change="changeTime"><text>{{ time || '未指定' }}</text></picker><button v-if="time" class="clear-time" aria-label="清除时间" @tap="time = ''"><AppIcon name="close" :size="24" /></button><AppIcon v-else name="chevron" :size="23" /></view>
           <picker :range="accounts" :value="accounts.indexOf(account)" @change="changeAccount"><view class="form-row"><AppIcon name="wallet" :size="33" /><text class="form-label">账户</text><text class="form-value">{{ account }}</text><AppIcon name="chevron" :size="23" /></view></picker>
-          <picker :range="store.books" range-key="name" :value="store.books.findIndex(book => book.id === bookId)" @change="changeBook"><view class="form-row"><AppIcon name="book" :size="33" /><text class="form-label">账本</text><text class="form-value">{{ activeBook.name }}</text><AppIcon name="chevron" :size="23" /></view></picker>
+          <picker :range="store.books" range-key="name" :value="store.books.findIndex(book => book.id === bookId)" :disabled="!!editingId && activeBook.kind === 'shared'" @change="changeBook"><view class="form-row"><AppIcon name="book" :size="33" /><text class="form-label">账本</text><text class="form-value">{{ activeBook.name }}</text><AppIcon v-if="!editingId || activeBook.kind !== 'shared'" name="chevron" :size="23" /></view></picker>
+          <view v-if="activeBook.kind === 'shared'" class="form-row"><AppIcon name="user" :size="33" /><text class="form-label">记账人</text><text class="form-value">{{ recordedBy }}</text></view>
         </view>
       </view>
     </scroll-view>

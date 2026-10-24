@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app'
-import { useLedgerStore } from '@/store/ledger'
+import { onLaunch, onShow } from '@dcloudio/uni-app'
+import { useAuthStore } from '@/store/auth'
 
-onLaunch(() => useLedgerStore().hydrate())
+onLaunch(() => { void useAuthStore().bootstrap() })
+onShow(() => { void useAuthStore().verifyIfNeeded() })
 </script>
 
 <style lang="scss">

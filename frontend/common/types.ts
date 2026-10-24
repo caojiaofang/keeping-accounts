@@ -15,6 +15,23 @@ export interface Book {
   icon: string
   color: string
   budget: number
+  kind?: 'personal' | 'shared'
+  members?: BookMember[]
+}
+
+export interface BookMember {
+  userId: string
+  name: string
+  color: string
+  role: 'owner' | 'member'
+  status: 'active' | 'removed'
+}
+
+export interface BookInvitation {
+  token: string
+  bookId: string
+  expiresAt: number
+  revoked: boolean
 }
 
 export interface Entry {
@@ -28,4 +45,5 @@ export interface Entry {
   note: string
   account: string
   createdAt: number
+  createdBy?: string
 }

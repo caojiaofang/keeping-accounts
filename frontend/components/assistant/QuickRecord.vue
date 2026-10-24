@@ -60,15 +60,16 @@ function applyEdit() {
   editingKey.value = ''
 }
 function saveDraft(draft: AssistantDraft) {
-  if (draft.status !== 'pending') return
+  if (draft.status !== 'pending') return false
   const { key, status, ...entry } = draft
-  store.saveEntry(entry)
+  if (!store.saveEntry(entry)) return false
   draft.status = 'saved'
+  return true
 }
-function confirmOne(draft: AssistantDraft) { saveDraft(draft); toast(store.storageAvailable ? '已保存到本地账本' : '已记下，本次仅在运行中保留') }
+function confirmOne(draft: AssistantDraft) { if (saveDraft(draft)) toast(store.storageAvailable ? '已保存到本地账本' : '已记下，本次仅在运行中保留') }
 function confirmAll() {
-  pending.value.forEach(saveDraft)
-  toast(store.storageAvailable ? '账单已保存到本地' : '已记下，本次仅在运行中保留')
+  const results = pending.value.map(saveDraft)
+  if (results.every(Boolean)) toast(store.storageAvailable ? '账单已保存到本地' : '已记下，本次仅在运行中保留')
 }
 function viewLedger() { uni.redirectTo({ url: '/pages/ledger/index' }) }
 </script>

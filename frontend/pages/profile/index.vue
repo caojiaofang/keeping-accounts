@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
+import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/mock'
 import { money, toast } from '@/common/format'
+import { entryAuthor } from '@/common/shared-books'
 
 const store = useLedgerStore()
+const auth = useAuthStore()
 store.hydrate()
 const nickname = ref('认真生活的你')
-try { nickname.value = uni.getStorageSync('moji-nickname') || nickname.value } catch { /* 无本地偏好时使用默认称呼。 */ }
+function loadNickname() {
+  nickname.value = auth.user ? '墨记用户' : '认真生活的你'
+  try { nickname.value = uni.getStorageSync(store.preferenceKey('nickname')) || nickname.value } catch { /* 无本地偏好时使用默认称呼。 */ }
+}
+loadNickname()
+onShow(loadNickname)
 const nicknameOpen = ref(false)
 const budgetOpen = ref(false)
 const categoriesOpen = ref(false)
@@ -25,21 +34,22 @@ const menuGroups = [
 ]
 function saveNickname(value: string) {
   if (!value) return toast('请输入你的昵称')
-  try { uni.setStorageSync('moji-nickname', value) } catch { return toast('本地空间不足，昵称暂未保存') }
+  try { uni.setStorageSync(store.preferenceKey('nickname'), value) } catch { return toast('本地空间不足，昵称暂未保存') }
   nickname.value = value
   nicknameOpen.value = false
   toast('昵称已更新')
 }
 function saveBudget(value: string) {
   if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  store.updateBudget(Math.round(Number(value) * 100))
+  if (!store.updateBudget(Math.round(Number(value) * 100))) return
   budgetOpen.value = false
   toast('月预算已更新')
 }
 function exportEntries() {
   if (!store.bookEntries.length) return toast('当前账本还没有账单可导出')
   const cell = (value: string) => `"${value.replace(/"/g, '""')}"`
-  const lines = ['日期,时间,类型,分类,金额（元）,账户,备注', ...[...store.bookEntries].sort((a, b) => b.date.localeCompare(a.date)).map(entry => [entry.date, entry.time || '', entry.type === 'expense' ? '支出' : '收入', store.categoryOf(entry.categoryId).name, (entry.amount / 100).toFixed(2), entry.account, entry.note].map(cell).join(','))]
+  const shared = store.activeBook.kind === 'shared'
+  const lines = [`日期,时间,类型,分类,金额（元）,账户,备注${shared ? ',记账人' : ''}`, ...[...store.bookEntries].sort((a, b) => b.date.localeCompare(a.date)).map(entry => [entry.date, entry.time || '', entry.type === 'expense' ? '支出' : '收入', store.categoryOf(entry.categoryId).name, (entry.amount / 100).toFixed(2), entry.account, entry.note, ...(shared ? [entryAuthor(store.activeBook, entry)] : [])].map(cell).join(','))]
   uni.setClipboardData({ data: '\uFEFF' + lines.join('\r\n'), success: () => toast('账单 CSV 已复制，可粘贴到表格中'), fail: () => toast('复制未完成，请重新尝试') })
 }
 function menuAction(key: string) {
@@ -47,23 +57,44 @@ function menuAction(key: string) {
   else if (key === 'categories') categoriesOpen.value = true
   else if (key === 'export') exportEntries()
   else if (key === 'help') uni.showModal({ title: '开始使用墨记', content: '点击底部“记一笔”录入收支；点击明细中的账单可以编辑或删除。顶部可切换月份和账本，统计页会同步展示对应数据。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
-  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '当前为本地体验版本，首次打开包含演示账单。数据只保存在此设备，尚未接入微信登录和云端同步。清理小程序数据或卸载将丢失记录，可先导出账单留存。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
+  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。当前账单只保存在此设备，按账号独立保存；体验数据不会自动转入登录账号。云端账单同步尚未开放，清理存储前请先导出记录。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
   else if (key === 'about') uni.showModal({ title: '墨记', content: '把日子，一笔一笔记好。\n\n版本 0.1.0\n一款简单、安静的日常记账工具。', showCancel: false, confirmText: '继续记录', confirmColor: '#285e4e' })
 }
 function reset() {
   uni.showModal({ title: '恢复演示数据？', content: '这会覆盖本机现有的账单、自建账本和预算设置。需要保留的账单请先导出。', confirmText: '恢复演示', confirmColor: '#ae674e', success: result => { if (result.confirm) { store.resetDemo(); toast('演示数据已恢复') } } })
+}
+function openAccount() {
+  if (auth.user) nicknameOpen.value = true
+  else uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2Fprofile%2Findex' })
+}
+function logout() {
+  if (auth.busy) return
+  uni.showModal({
+    title: '退出当前账号？',
+    content: '本地记录会保留在此账号下，重新登录后可以继续查看。',
+    confirmText: '退出登录',
+    confirmColor: '#285e4e',
+    success: async result => {
+      if (!result.confirm) return
+      try {
+        await auth.logout()
+        uni.reLaunch({ url: '/pages/login/index' })
+      } catch (cause) { toast(cause instanceof Error ? cause.message : '退出失败，请重新尝试') }
+    },
+  })
 }
 </script>
 
 <template>
   <view class="page">
     <TopBar title="我的" subtitle="生活有度，心里有数。" />
-    <button class="profile-card" @tap="nicknameOpen = true"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ nickname }}</view><view class="profile-caption">今天，也要好好照顾自己。</view><view class="local-badge"><view class="badge-dot" />本地体验</view></view><AppIcon name="edit" :size="30" /></button>
+    <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '用微信登录，开始你的记录' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 账单保存在本机' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
     <view class="personal-stats panel"><view><text class="stat-value number">{{ recordedDays }}<text class="stat-unit"> 天</text></text><text class="stat-label">记过账的日子</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.entries.length }}<text class="stat-unit"> 笔</text></text><text class="stat-label">认真记录的生活</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.books.length }}<text class="stat-unit"> 本</text></text><text class="stat-label">专属生活账本</text></view></view>
     <button class="budget-preview" @tap="budgetOpen = true"><view class="budget-preview-top"><view class="row"><AppIcon name="wallet" :size="34" /><text>{{ store.activeBook.name }} · 月预算</text></view><AppIcon name="chevron" :size="26" /></view><view class="between budget-preview-bottom"><text class="budget-preview-amount number"><text>¥ </text>{{ money(store.activeBook.budget, 0) }}</text><text class="budget-progress-text">已使用 {{ budgetPercent }}%</text></view><view class="budget-track"><view :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></button>
     <view v-for="(group, index) in menuGroups" :key="index" class="menu-panel panel"><button v-for="item in group" :key="item.key" class="menu-row" @tap="menuAction(item.key)"><view class="menu-icon"><AppIcon :name="item.icon" :size="35" /></view><view class="menu-copy"><text class="menu-title">{{ item.title }}</text><text v-if="item.description && item.key !== 'about'" class="menu-description">{{ item.description }}</text></view><text v-if="item.key === 'about'" class="version-label">{{ item.description }}</text><AppIcon name="chevron" :size="25" /></button></view>
-    <view class="local-notice"><AppIcon name="shield" :size="25" /><text>数据保存在本机，暂未开启云端同步</text></view>
-    <button class="reset-button" @tap="reset">恢复演示数据</button>
+    <view class="local-notice"><AppIcon name="shield" :size="25" /><text>{{ auth.user ? '记录按账号独立保存在本机，暂未开启云端同步' : '当前为体验模式，演示数据不会转入登录账号' }}</text></view>
+    <button v-if="auth.user" class="logout-button" :disabled="auth.busy" :loading="auth.loggingOut" @tap="logout">退出登录</button>
+    <button v-else class="reset-button" @tap="reset">恢复演示数据</button>
     <view class="brand-footer"><text class="footer-brand">墨记</text><text>把日子，一笔一笔记好。</text></view>
     <BottomNav active="profile" />
     <PromptSheet :open="nicknameOpen" title="怎么称呼你" placeholder="输入昵称" :initial="nickname" :maxlength="12" @close="nicknameOpen = false" @confirm="saveNickname" />
@@ -106,6 +137,7 @@ function reset() {
 .version-label { color: #a1aba1; font-size: 23rpx; }
 .local-notice { display: flex; align-items: center; justify-content: center; gap: 9rpx; color: #9aa89d; font-size: 21rpx; margin-top: 32rpx; }
 .reset-button { margin: 20rpx auto 0; color: #879b8b; font-size: 22rpx; padding: 5rpx; }
+button.logout-button { width: 100%; padding: 23rpx 0; margin-top: 22rpx; border: 1rpx solid #dce7df; border-radius: 20rpx; font-size: 25rpx; color: #65816d; }
 .brand-footer { display: flex; flex-direction: column; align-items: center; margin-top: 34rpx; color: #a8b3a9; font-size: 20rpx; gap: 6rpx; }
 .footer-brand { letter-spacing: 6rpx; font-size: 28rpx; color: #91a294; padding-left: 6rpx; }
 .category-toggle { display: flex; gap: 30rpx; margin: 15rpx 0 27rpx; }

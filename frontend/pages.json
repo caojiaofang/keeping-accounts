@@ -1,12 +1,16 @@
 {
   "pages": [
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录墨记" } },
     { "path": "pages/ledger/index", "style": { "navigationBarTitleText": "墨记" } },
     { "path": "pages/statistics/index", "style": { "navigationBarTitleText": "收支统计" } },
     { "path": "pages/books/index", "style": { "navigationBarTitleText": "我的账本" } },
     { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/record/index", "style": { "navigationBarTitleText": "记一笔", "disableScroll": true } },
     { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "墨记助手", "disableScroll": true } },
-    { "path": "pages/calendar/index", "style": { "navigationBarTitleText": "消费日历" } }
+    { "path": "pages/calendar/index", "style": { "navigationBarTitleText": "消费日历" } },
+    { "path": "pages/shared-books/index", "style": { "navigationBarTitleText": "多人账本" } },
+    { "path": "pages/shared-book/index", "style": { "navigationBarTitleText": "共同记账" } },
+    { "path": "pages/book-invite/index", "style": { "navigationBarTitleText": "账本邀请" } }
   ],
   "globalStyle": {
     "navigationStyle": "custom",

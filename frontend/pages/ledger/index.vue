@@ -11,6 +11,7 @@ import { useLedgerStore } from '@/store/ledger'
 import { categories } from '@/common/mock'
 import { money, toast } from '@/common/format'
 import type { EntryType } from '@/common/types'
+import { activeMembers } from '@/common/shared-books'
 
 const store = useLedgerStore()
 store.hydrate()
@@ -37,19 +38,21 @@ function selectCategory(id: string) { categoryFilter.value = id; categoryOpen.va
 function setFilter(value: 'all' | EntryType) { filter.value = value; categoryFilter.value = '' }
 function saveBudget(value: string) {
   if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  store.updateBudget(Math.round(Number(value) * 100))
+  if (!store.updateBudget(Math.round(Number(value) * 100))) return
   budgetOpen.value = false
   toast('月预算已更新')
 }
 function viewStats() { uni.redirectTo({ url: '/pages/statistics/index' }) }
 function openAssistant(mode: string) { uni.navigateTo({ url: `/pages/assistant/index?mode=${mode}` }) }
 function openCalendar() { uni.navigateTo({ url: '/pages/calendar/index' }) }
+function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=${encodeURIComponent(store.activeBookId)}` }) }
 </script>
 
 <template>
   <view class="page">
     <TopBar title="墨记" subtitle="把日子，一笔一笔记好。" brand />
     <view class="context-row"><MonthPicker v-model="store.selectedMonth" /><BookSwitcher /></view>
+    <button v-if="store.activeBook.kind === 'shared'" class="shared-ledger-link" @tap="openSharedBook"><AppIcon name="home" :size="26" /><text>多人账本 · {{ activeMembers(store.activeBook).length }} 人一起记</text><text>成员与邀请</text><AppIcon name="chevron" :size="22" /></button>
 
     <view class="summary-card">
       <view class="summary-watermark"><AppIcon name="leaf" :size="176" /></view>
@@ -84,6 +87,8 @@ function openCalendar() { uni.navigateTo({ url: '/pages/calendar/index' }) }
 
 <style scoped lang="scss">
 .context-row { display: flex; justify-content: space-between; align-items: center; margin: 2rpx 0 24rpx; }
+.shared-ledger-link { display: flex; align-items: center; gap: 9rpx; padding: 0 4rpx 22rpx; font-size: 21rpx; color: #789681; width: 100%; text-align: left; }
+.shared-ledger-link > text:first-of-type { flex: 1; }
 .summary-card { background: #dfede5; border-radius: 32rpx; padding: 31rpx 32rpx 28rpx; position: relative; overflow: hidden; }
 .summary-watermark { position: absolute; right: -20rpx; top: 44rpx; opacity: .055; transform: rotate(-18deg); }
 .summary-heading { display: flex; align-items: center; justify-content: space-between; font-size: 25rpx; color: #557061; }

@@ -1,46 +1,145 @@
 # 墨记后端
 
-后端技术选型已确定为 **Python + FastAPI + PostgreSQL + Redis**。当前尚未初始化后端应用，本文件用于保留后端目录并说明后续开发范围。
+基于 **Python 3.12 + FastAPI + SQLAlchemy 2 + PostgreSQL + Redis** 的后端基础框架，使用 Alembic 管理数据库迁移，在 Windows + PyCharm 中开发。
 
-## 计划实现
+当前已接入 z11 的 PostgreSQL 开发库和 Redis，并实现微信小程序 code 登录、当前用户查询和退出登录。用户表已通过 Alembic 迁移创建，账本、分类、账单、预算、统计和 AI 接口尚未实现，前端数据流程暂未切换。接口和 uni-app 调用示例见[微信登录说明](docs/wechat-login.md)。
 
-- 微信登录、用户身份与账本权限校验。
-- 账本、分类、收支账单、预算和统计 API。
-- PostgreSQL 持久化与数据库迁移。
-- Redis 登录态、接口限流与短期防重复提交。
-- 通过配置的 sub2api 中转站调用大模型，生成一句话记账草稿。
-- 聊天会话、受控账单查询工具和消费分析。
-- 模型结果校验、确认保存、重复提交保护、超时及调用次数限制。
+## 在 PyCharm 中启动
 
-数据访问建议使用 SQLAlchemy，数据库迁移建议使用 Alembic，数据校验使用 Pydantic。具体目录结构和依赖版本在后端开发时确定。
+1. 使用 PyCharm 打开仓库根目录，或单独打开 `backend` 目录。
+2. 在 Python Interpreter 设置中选择已有解释器 `backend/.venv/Scripts/python.exe`。当前工作区已创建此 Python 3.12 虚拟环境；其他机器请先按下面的命令创建。如果打开的是仓库根目录，可右键 `backend` → **Mark Directory as → Sources Root**，让编辑器正确识别 `app` 导入。
+3. 在 PyCharm Terminal 中进入 `backend`，安装开发依赖并复制配置文件。
 
-## 复用 z11 的数据库服务
+   ```powershell
+   # 已在 backend 目录时无需执行。
+   cd backend
+   # 当前工作区已创建虚拟环境；其他机器首次配置时执行。
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+   # 仅在 .env 尚不存在时复制，避免覆盖已有配置。
+   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+   ```
 
-PostgreSQL 和 Redis 均复用 z11 上现有的服务，不额外部署新的数据库实例。
+4. 右键 `run.py` 选择 **Run** 启动，或选择 **Debug** 调试，无需 FastAPI 专用运行模板。本机 `.env` 已配置远程直连并启用启动连接检查，成功时日志显示 PostgreSQL 已连接到 `keeping_accounts_dev` 且 Redis 已连接。
+5. 打开 [Swagger 文档](http://127.0.0.1:8000/docs) 或 [健康检查](http://127.0.0.1:8000/api/v1/health)。健康检查返回 `{"status":"ok"}`。
 
-- PostgreSQL：开发库为 `keeping_accounts_dev`，正式库为 `keeping_accounts_prod`，保存用户、账本、账单、预算、聊天会话和消息。建表及表结构变更通过 Alembic 管理，迁移账号需要具有目标库及目标 schema 的相应权限。
-- Redis：保存有过期时间的登录态、限流计数与短期幂等状态，开发环境 key 前缀为 `moji:dev:`，正式环境为 `moji:prod:`，避免混用临时状态。实际逻辑库编号在核对现有部署后配置。
-- 账单和长期聊天记录以 PostgreSQL 为准；Redis 中的数据过期或被清理后，不应导致正式账单或历史消息丢失。账单写入还需通过 PostgreSQL 事务和唯一约束保证一致性，不能只靠 Redis 防重。
+如果手动创建 Python Run/Debug Configuration，Script path 选择 `backend/run.py`，Working directory 选择 `backend`，解释器选择上述虚拟环境。配置文件通过绝对路径定位，无论打开整个仓库还是后端目录，均读取 `backend/.env`。
 
-建议后端使用 SQLAlchemy 的异步数据库访问，PostgreSQL 驱动选择 `asyncpg`，Redis 使用支持异步调用的客户端。SQLAlchemy 提供了对应的 [asyncpg 接入方式](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#module-sqlalchemy.dialects.postgresql.asyncpg)。
+`.env.example` 默认 `RELOAD=false`，方便 PyCharm 断点调试；需要修改代码后自动重启时改为 `true`。也可从 `backend` 目录执行 `.\.venv\Scripts\python.exe run.py`。上述命令直接使用虚拟环境解释器，无需激活脚本或修改 PowerShell 执行策略。
 
-两个数据库已于 2026-10-23 在 z11 的 `postgres16` 容器（PostgreSQL 16.14）中创建，均为 UTF-8 编码，所有者为现有的 `postgres` 角色。当前为空库，后续通过数据库迁移创建业务表，应用连接账号另行配置。
+如果官方依赖源下载较慢，可临时指定镜像安装，不修改全局 pip 配置：
 
-| 环境 | 数据库 | Redis key 前缀 |
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -i https://mirrors.aliyun.com/pypi/simple/
+```
+
+## 目录与职责
+
+```text
+backend/
+├── app/
+│   ├── api/               # 路由、公共依赖，v1 中提供健康检查和微信登录
+│   ├── core/              # 环境配置、应用生命周期
+│   ├── db/                # SQLAlchemy 模型基类
+│   ├── models/            # 数据库模型，已包含微信用户表
+│   ├── schemas/           # Pydantic 请求和响应结构
+│   ├── repositories/      # 用户数据访问、并发登录去重
+│   ├── services/          # 登录业务和 Redis 登录态管理
+│   ├── integrations/      # 微信 code2Session 适配，后续扩展模型调用
+│   └── main.py            # 应用工厂 create_app
+├── alembic/               # 迁移环境，已包含 0001_users 用户表迁移
+├── tests/                 # 无需数据库的框架检查
+├── .env.example           # 可提交的配置示例
+├── alembic.ini
+├── pyproject.toml         # pytest、Ruff 配置
+├── requirements.txt       # 运行依赖
+├── requirements-dev.txt   # 开发与检查依赖
+├── check_connections.py    # 真实 PostgreSQL / Redis 连接检查
+└── run.py                 # PyCharm 运行和调试入口
+```
+
+后续扩展遵循 `api → services → repositories → models` 的职责划分，输入输出结构放入 `schemas`，目前仅预留模块边界。
+
+## 配置说明
+
+配置通过 `pydantic-settings` 读取，系统环境变量优先于 `backend/.env`，最后使用代码默认值。文件采用 UTF-8，真实 `.env` 已被仓库忽略。
+
+| 配置 | 默认值 / 用途 |
+| --- | --- |
+| `APP_NAME` | `墨记后端` |
+| `APP_ENV` | `development`，可选 `test`、`production` |
+| `HOST` / `PORT` | `127.0.0.1` / `8000`，用于 `run.py` |
+| `RELOAD` | `false`，用于 `run.py` 的开发自动重启 |
+| `LOG_LEVEL` | `INFO` |
+| `CORS_ORIGINS` | `[]`，浏览器跨域白名单，例如 `["http://localhost:5173"]` |
+| `DATABASE_URL` | 可留空，PostgreSQL 的 asyncpg 连接地址 |
+| `REDIS_URL` | 可留空，Redis 连接地址 |
+| `REDIS_KEY_PREFIX` | `moji:dev:`，为后续 Redis key 命名预留 |
+| `CHECK_CONNECTIONS_ON_STARTUP` | 默认 `false`；本机 `.env` 为 `true`，启动时检查数据库及 Redis |
+| `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | 小程序 AppID 与后端专用密钥，真实密钥仅填本地 `.env` |
+| `WECHAT_TIMEOUT_SECONDS` | 微信请求超时，默认 10 秒 |
+| `AUTH_SESSION_TTL_SECONDS` | 登录态有效期，默认 604800 秒（7 天） |
+| `AUTH_LOGIN_RATE_LIMIT` | 每个请求来源 IP 每分钟登录次数，默认 30 |
+
+未配置连接且保持 `CHECK_CONNECTIONS_ON_STARTUP=false` 时仍可独立启动。设为 `true` 后必须同时配置两项连接，启动时执行 PostgreSQL 只读查询和 Redis PING，检查失败则退出；不会自动建表或迁移。健康检查仅表示应用运行，不持续探测外部服务。服务退出时释放连接资源。
+
+配置校验限制 `development` / `test` 环境只连接 `keeping_accounts_dev` 并使用 `moji:dev:` 前缀；`production` 环境要求 `keeping_accounts_prod` 和 `moji:prod:`。这些是本应用的配置校验规则。
+
+公共依赖位于 `app/api/deps.py`。后续接口使用 `get_db` 获取请求级会话，由业务服务显式提交或使用 `session.begin()` 管理事务，依赖层不自动提交；未配置对应连接时返回 HTTP 503。`get_redis` 提供客户端，后续构造 key 时需要显式使用配置中的前缀，当前没有写入任何 key。
+
+日志使用 Python logging 和 Uvicorn 日志，不输出连接 URL 或密钥。Swagger、ReDoc 和 OpenAPI 当前启用，主要用于开发联调。
+
+## PostgreSQL、Redis 与迁移
+
+复用 z11 的现有 `postgres16` 和 `redis6` 容器，不额外部署或重启数据库服务。本机连接配置已于 2026-10-24 写入 `backend/.env`，真实密码不写入示例或提交到 Git。
+
+- PostgreSQL：直连 `47.251.103.11:15432`，数据库为 `keeping_accounts_dev`，专用账号为 `keeping_accounts_dev_app`。账号不是超级用户，已获得开发库连接及 `public` schema 的使用和建表权限，供后续 Alembic 迁移使用。
+- Redis：直连 `47.251.103.11:16379`，复用现有密码认证，开发使用逻辑库 **1** 和 `moji:dev:` 前缀。前缀是应用命名约定；当前使用现有 Redis 默认账号，不是 Redis ACL 权限隔离。
+- 本地调试直接使用上述远程地址，无需 SSH 隧道。当前机器已完成配置，直接运行 `run.py`；其他机器需单独获取认证信息，示例文件不含真实密码。
+
+| 环境 | PostgreSQL 数据库 | Redis key 前缀 |
 | --- | --- | --- |
 | 开发 | `keeping_accounts_dev` | `moji:dev:` |
 | 正式 | `keeping_accounts_prod` | `moji:prod:` |
 
-后续通过环境变量提供连接配置，以下为开发环境的配置格式：
-
 ```dotenv
-DATABASE_URL=postgresql+asyncpg://<user>:<password>@<host>:<port>/keeping_accounts_dev
-REDIS_URL=redis://<user>:<password>@<host>:<port>/<db>
+DATABASE_URL=postgresql+asyncpg://keeping_accounts_dev_app:<encoded-password>@47.251.103.11:15432/keeping_accounts_dev
+REDIS_URL=redis://:<encoded-password>@47.251.103.11:16379/1
 REDIS_KEY_PREFIX=moji:dev:
+CHECK_CONNECTIONS_ON_STARTUP=true
 ```
 
-正式环境使用 `keeping_accounts_prod`，并设置 `REDIS_KEY_PREFIX=moji:prod:`。实际主机、端口、认证和 TLS 配置以 z11 的部署为准，连接 URL 中的特殊字符需要正确编码。
+连接 URL 中用户名和密码的特殊字符需要进行 URL 编码。正式环境同时配置 `APP_ENV=production`、正式库及 `REDIS_KEY_PREFIX=moji:prod:`，`APP_ENV` 本身不会切换数据库或 Redis 前缀，正式账号与部署配置另行准备。
 
-数据库迁移先在开发库验证，再由正式环境的部署流程执行；开发运行与自动化测试使用开发库，不连接正式库。Redis 前缀目前仅为配置约定，尚未写入服务配置或创建任何 Redis key。
+从 `backend` 目录验证真实连接，也可在 PyCharm 中直接运行 `check_connections.py`：
 
-详细方案见[项目方案说明](../项目方案说明.md)。模型密钥、微信 AppSecret 和数据库密码仅通过本地或服务器环境配置，不能写入前端或提交到 Git。
+```powershell
+.\.venv\Scripts\python.exe check_connections.py
+```
+
+此命令只读查询 PostgreSQL 的当前数据库和账号，执行 Redis PING，并在当前前缀下创建一个 TTL 为 30 秒的随机探测 key，验证读写后立即删除。不会创建 PostgreSQL 业务表或读取现有业务数据。
+
+当前开发库已执行 `0001_users`，包含 `users` 表和 Alembic 版本记录。其他开发机器使用同一库时无需重复建表，`alembic upgrade head` 可重复执行。后续添加模型后，在 `app/models/__init__.py` 中导入对应模型，再从 `backend` 目录生成并审核迁移：
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "新增业务表"
+# 先检查生成的迁移脚本，再应用到配置中的开发库。
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+迁移需要可访问的 PostgreSQL 和足够的 schema 权限。开发与测试使用开发环境，正式迁移通过后续部署流程执行。框架不会调用 `create_all()` 或在启动时自动执行迁移。
+
+## 开发检查
+
+从 `backend` 目录运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m pip check
+```
+
+默认自动化检查验证框架、微信适配、登录接口、登录态及故障行为，不访问 z11。真实 PostgreSQL / Redis 登录流程测试需显式启用，方法见[微信登录验证说明](docs/wechat-login.md)。依赖文件固定直接依赖的版本，传递依赖由 pip 按兼容约束解析。
+
+框架使用方式参考 [FastAPI 配置管理](https://fastapi.tiangolo.com/advanced/settings/)、[FastAPI 生命周期](https://fastapi.tiangolo.com/advanced/events/)、[Alembic 异步迁移示例](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic)及 [Redis 异步客户端](https://redis.io/docs/latest/develop/clients/redis-py/async/)。业务规划见[项目方案说明](../项目方案说明.md)。
