@@ -22,7 +22,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app = FastAPI(
         title=settings.app_name,
-        description="墨记后端，支持微信小程序登录与登录态管理。",
+        description="墨记后端，支持微信登录、个人账本、账单及预算管理。",
         version="0.1.0",
         lifespan=lifespan,
     )
@@ -43,6 +43,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse(
                 status_code=422,
                 content={"detail": "请求参数不正确，请检查 code 和接口允许的字段"},
+                headers={"Cache-Control": "no-store"},
+            )
+        if request.url.path.startswith("/api/v1/"):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "请求参数不正确，请检查金额、日期、分类及允许的字段"},
                 headers={"Cache-Control": "no-store"},
             )
         return await request_validation_exception_handler(request, error)

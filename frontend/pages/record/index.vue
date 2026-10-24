@@ -9,10 +9,12 @@ import { localDate, toast } from '@/common/utils/format'
 import { isCalendarDate } from '@/common/services/expense-calendar'
 import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
 import type { EntryType } from '@/common/types'
+import { newId } from '@/common/utils/id'
 
 const store = useLedgerStore()
 store.hydrate()
 const editingId = ref('')
+const editingVersion = ref<number>()
 const type = ref<EntryType>('expense')
 const categoryId = ref('food')
 const amount = ref('0')
@@ -23,6 +25,7 @@ const bookId = ref(store.activeBookId)
 const accounts = ['微信', '支付宝', '银行卡', '现金']
 const account = ref('微信')
 const saving = ref(false)
+const requestId = newId()
 const originalEntry = computed(() => store.entries.find(entry => entry.id === editingId.value))
 const recordedBy = computed(() => originalEntry.value ? entryAuthor(store.books.find(book => book.id === originalEntry.value!.bookId), originalEntry.value) : '我')
 const visibleCategories = computed(() => categories.filter(category => category.type === type.value))
@@ -30,6 +33,7 @@ const activeBook = computed(() => store.books.find(book => book.id === bookId.va
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 
 onLoad((options) => {
+  if (store.accountId && !store.cloudReady) { goBack(); toast('请先在明细页连接云端账本后再记账'); return }
   if (!options?.id) {
     if (options?.date && isCalendarDate(options.date)) date.value = options.date
     if (options?.type === 'income') changeType('income')
@@ -39,6 +43,7 @@ onLoad((options) => {
   if (!entry) { toast('这笔账单不存在'); return }
   if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) { goBack(); toast('你可以查看共同账单，只有本人或创建者可以修改'); return }
   editingId.value = entry.id
+  editingVersion.value = entry.version
   type.value = entry.type
   categoryId.value = entry.categoryId
   amount.value = String(entry.amount / 100)
@@ -70,19 +75,23 @@ function goBack() {
   else uni.redirectTo({ url: '/pages/ledger/index' })
 }
 function openQuickRecord() { uni.navigateTo({ url: '/pages/assistant/index?mode=record' }) }
-function save() {
+async function save() {
   if (saving.value) return
   const cents = Math.round(Number(amount.value) * 100)
   if (!Number.isFinite(cents) || cents <= 0) return toast('请输入大于 0 的金额')
   saving.value = true
-  const saved = store.saveEntry({ type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value }, editingId.value || undefined)
+  const saved = await store.saveEntry({ version: editingVersion.value, type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value }, editingId.value || undefined, requestId)
   if (!saved) { saving.value = false; return }
   goBack()
-  toast(store.storageAvailable ? (editingId.value ? '账单已更新' : '已记下这一笔') : '已记下，本地空间不足，仅本次运行保留')
+  toast(store.accountId ? '已保存到云端' : store.storageAvailable ? (editingId.value ? '账单已更新' : '已记下这一笔') : '已记下，本地空间不足，仅本次运行保留')
 }
 function remove() {
-  uni.showModal({ title: '删除这笔账单？', content: '删除后，本地记录和统计将同步更新。', confirmText: '删除', confirmColor: '#ae674e', success: result => {
-    if (result.confirm && store.deleteEntry(editingId.value)) { goBack(); toast('账单已删除') }
+  if (saving.value) return
+  uni.showModal({ title: '删除这笔账单？', content: '删除后，账本明细和统计将同步更新。', confirmText: '删除', confirmColor: '#ae674e', success: async result => {
+    if (!result.confirm || saving.value) return
+    saving.value = true
+    if (await store.deleteEntry(editingId.value, editingVersion.value)) { goBack(); toast('账单已删除') }
+    else saving.value = false
   } })
 }
 </script>

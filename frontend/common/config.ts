@@ -20,8 +20,8 @@ try {
 // #endif
 
 export const appConfig = {
-  // 仅明确识别到正式版时连接正式环境，未知版本继续使用开发地址。
-  apiBaseUrl: (envVersion === 'release' ? PROD_BASE_URL : DEV_BASE_URL).replace(/\/+$/, ''),
+  // 仅开发版连接本地环境，体验版、正式版及未知版本均连接正式环境。
+  apiBaseUrl: (envVersion === 'develop' ? DEV_BASE_URL : PROD_BASE_URL).replace(/\/+$/, ''),
   envVersion,
   envName: envNames.get(envVersion) || '未知版本',
   requestTimeout: 15000,

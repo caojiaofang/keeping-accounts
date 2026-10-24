@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { computed, ref, watch } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
+import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
@@ -9,11 +10,13 @@ import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
 import { money, toast } from '@/common/utils/format'
-import { entryAuthor } from '@/common/services/shared-books'
+import { entryAuthor, canManageBook } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 const auth = useAuthStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 const nickname = ref('认真生活的你')
 function loadNickname() {
   nickname.value = auth.user ? '墨记用户' : '认真生活的你'
@@ -23,6 +26,8 @@ loadNickname()
 onShow(loadNickname)
 const nicknameOpen = ref(false)
 const budgetOpen = ref(false)
+const budgetVersion = ref<number>()
+watch(budgetOpen, open => { if (open) budgetVersion.value = store.activeBook.version })
 const categoriesOpen = ref(false)
 const categoryType = ref<'expense' | 'income'>('expense')
 const visibleCategories = computed(() => categories.filter(category => category.type === categoryType.value))
@@ -39,9 +44,10 @@ function saveNickname(value: string) {
   nicknameOpen.value = false
   toast('昵称已更新')
 }
-function saveBudget(value: string) {
+function openBudget() { if (!canManageBook(store.activeBook)) return toast('只有账本创建者可以设置共同预算'); budgetOpen.value = true }
+async function saveBudget(value: string) {
   if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  if (!store.updateBudget(Math.round(Number(value) * 100))) return
+  if (!await store.updateBudget(Math.round(Number(value) * 100), budgetVersion.value)) return
   budgetOpen.value = false
   toast('月预算已更新')
 }
@@ -52,12 +58,17 @@ function exportEntries() {
   const lines = [`日期,时间,类型,分类,金额（元）,账户,备注${shared ? ',记账人' : ''}`, ...[...store.bookEntries].sort((a, b) => b.date.localeCompare(a.date)).map(entry => [entry.date, entry.time || '', entry.type === 'expense' ? '支出' : '收入', store.categoryOf(entry.categoryId).name, (entry.amount / 100).toFixed(2), entry.account, entry.note, ...(shared ? [entryAuthor(store.activeBook, entry)] : [])].map(cell).join(','))]
   uni.setClipboardData({ data: '\uFEFF' + lines.join('\r\n'), success: () => toast('账单 CSV 已复制，可粘贴到表格中'), fail: () => toast('复制未完成，请重新尝试') })
 }
+function exportLegacyEntries() {
+  const cell = (value: string) => `"${value.replace(/"/g, '""')}"`
+  const lines = ['日期,时间,类型,分类,金额（元）,账户,备注,原账本ID', ...store.legacyEntries.map(entry => [entry.date, entry.time || '', entry.type === 'expense' ? '支出' : '收入', store.categoryOf(entry.categoryId).name, (entry.amount / 100).toFixed(2), entry.account, entry.note, entry.bookId].map(cell).join(','))]
+  uni.setClipboardData({ data: '\uFEFF' + lines.join('\r\n'), success: () => toast('升级前的本机账单已复制为 CSV'), fail: () => toast('复制未完成，请重试') })
+}
 function menuAction(key: string) {
-  if (key === 'budget') budgetOpen.value = true
+  if (key === 'budget') openBudget()
   else if (key === 'categories') categoriesOpen.value = true
   else if (key === 'export') exportEntries()
   else if (key === 'help') uni.showModal({ title: '开始使用墨记', content: '点击底部“记一笔”录入收支；点击明细中的账单可以编辑或删除。顶部可切换月份和账本，统计页会同步展示对应数据。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
-  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。当前账单只保存在此设备，按账号独立保存；体验数据不会自动转入登录账号。云端账单同步尚未开放，清理存储前请先导出记录。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
+  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。登录后的个人账本、账单、预算及分析对话保存在云端；体验数据与升级前的本机记录不会自动上传。智能识别会发送输入文本，聊天分析会按需发送本轮统计或必要明细给模型服务；记账需确认，分析不修改账单。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
   else if (key === 'about') uni.showModal({ title: '墨记', content: '把日子，一笔一笔记好。\n\n版本 0.1.0\n一款简单、安静的日常记账工具。', showCancel: false, confirmText: '继续记录', confirmColor: '#285e4e' })
 }
 function reset() {
@@ -71,7 +82,7 @@ function logout() {
   if (auth.busy) return
   uni.showModal({
     title: '退出当前账号？',
-    content: '本地记录会保留在此账号下，重新登录后可以继续查看。',
+    content: '云端个人账本会保留，重新登录后可以继续查看。',
     confirmText: '退出登录',
     confirmColor: '#285e4e',
     success: async result => {
@@ -88,11 +99,13 @@ function logout() {
 <template>
   <view class="page">
     <TopBar title="我的" subtitle="生活有度，心里有数。" />
-    <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '用微信登录，开始你的记录' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 账单保存在本机' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
+    <CloudStatus />
+    <button v-if="store.legacyEntries.length" class="local-notice" @tap="exportLegacyEntries">升级前有 {{ store.legacyEntries.length }} 笔本机记录，尚未上传。点击导出 CSV</button>
+    <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '用微信登录，开始你的记录' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 个人账本使用云端' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
     <view class="personal-stats panel"><view><text class="stat-value number">{{ recordedDays }}<text class="stat-unit"> 天</text></text><text class="stat-label">记过账的日子</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.entries.length }}<text class="stat-unit"> 笔</text></text><text class="stat-label">认真记录的生活</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.books.length }}<text class="stat-unit"> 本</text></text><text class="stat-label">专属生活账本</text></view></view>
-    <button class="budget-preview" @tap="budgetOpen = true"><view class="budget-preview-top"><view class="row"><AppIcon name="wallet" :size="34" /><text>{{ store.activeBook.name }} · 月预算</text></view><AppIcon name="chevron" :size="26" /></view><view class="between budget-preview-bottom"><text class="budget-preview-amount number"><text>¥ </text>{{ money(store.activeBook.budget, 0) }}</text><text class="budget-progress-text">已使用 {{ budgetPercent }}%</text></view><view class="budget-track"><view :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></button>
+    <button class="budget-preview" @tap="openBudget"><view class="budget-preview-top"><view class="row"><AppIcon name="wallet" :size="34" /><text>{{ store.activeBook.name }} · 月预算</text></view><AppIcon name="chevron" :size="26" /></view><view class="between budget-preview-bottom"><text class="budget-preview-amount number"><text>¥ </text>{{ money(store.activeBook.budget, 0) }}</text><text class="budget-progress-text">已使用 {{ budgetPercent }}%</text></view><view class="budget-track"><view :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></button>
     <view v-for="(group, index) in menuGroups" :key="index" class="menu-panel panel"><button v-for="item in group" :key="item.key" class="menu-row" @tap="menuAction(item.key)"><view class="menu-icon"><AppIcon :name="item.icon" :size="35" /></view><view class="menu-copy"><text class="menu-title">{{ item.title }}</text><text v-if="item.description && item.key !== 'about'" class="menu-description">{{ item.description }}</text></view><text v-if="item.key === 'about'" class="version-label">{{ item.description }}</text><AppIcon name="chevron" :size="25" /></button></view>
-    <view class="local-notice"><AppIcon name="shield" :size="25" /><text>{{ auth.user ? '记录按账号独立保存在本机，暂未开启云端同步' : '当前为体验模式，演示数据不会转入登录账号' }}</text></view>
+    <view class="local-notice"><AppIcon name="shield" :size="25" /><text>{{ auth.user ? '个人账本按账号保存在云端，体验数据不会自动上传' : '当前为体验模式，演示数据不会转入登录账号' }}</text></view>
     <button v-if="auth.user" class="logout-button" :disabled="auth.busy" :loading="auth.loggingOut" @tap="logout">退出登录</button>
     <button v-else class="reset-button" @tap="reset">恢复演示数据</button>
     <view class="brand-footer"><text class="footer-brand">墨记</text><text>把日子，一笔一笔记好。</text></view>

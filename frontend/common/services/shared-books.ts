@@ -11,15 +11,15 @@ export function activeMembers(book?: Book): BookMember[] {
   return book?.members?.filter(member => member.status === 'active') || []
 }
 
-export function canWriteBook(book?: Book, userId = DEMO_USER_ID): boolean {
+export function canWriteBook(book?: Book, userId = book?.currentUserId || DEMO_USER_ID): boolean {
   return !!book && (book.kind !== 'shared' || activeMembers(book).some(member => member.userId === userId))
 }
 
-export function canManageBook(book?: Book, userId = DEMO_USER_ID): boolean {
+export function canManageBook(book?: Book, userId = book?.currentUserId || DEMO_USER_ID): boolean {
   return !!book && (book.kind !== 'shared' || activeMembers(book).some(member => member.userId === userId && member.role === 'owner'))
 }
 
-export function canEditEntry(book: Book | undefined, entry: Entry, userId = DEMO_USER_ID): boolean {
+export function canEditEntry(book: Book | undefined, entry: Entry, userId = book?.currentUserId || DEMO_USER_ID): boolean {
   return canWriteBook(book, userId) && (book?.kind !== 'shared' || canManageBook(book, userId) || entry.createdBy === userId)
 }
 
@@ -27,7 +27,12 @@ export function entryAuthor(book: Book | undefined, entry: Entry): string {
   if (book?.kind !== 'shared') return ''
   const member = book.members?.find(item => item.userId === entry.createdBy)
   if (!member) return '历史记账人'
-  return `${member.name}${member.status === 'removed' ? '（已移出）' : ''}`
+  return `${member.name}${member.status === 'removed' ? '（已移出）' : member.status === 'left' ? '（已退出）' : ''}`
+}
+
+export function entryEditor(book: Book | undefined, entry: Entry): string {
+  if (book?.kind !== 'shared' || !entry.updatedBy || entry.updatedBy === entry.createdBy) return ''
+  return book.members?.find(member => member.userId === entry.updatedBy)?.name || '历史成员'
 }
 
 export function newSharedBook(name: string, id: string): Book {

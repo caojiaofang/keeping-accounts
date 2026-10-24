@@ -36,6 +36,29 @@ class Settings(BaseSettings):
     wechat_timeout_seconds: float = Field(default=10, ge=1, le=30)
     auth_session_ttl_seconds: int = Field(default=604800, ge=300, le=2592000)
     auth_login_rate_limit: int = Field(default=30, ge=1, le=1000)
+    llm_base_url: str = "https://api.zf-yun.cn"
+    llm_api_key: SecretStr | None = None
+    llm_model: str = "gpt-6-luna"
+    llm_api_mode: Literal["responses", "chat_completions"] = "responses"
+    llm_timeout_seconds: float = Field(default=45, ge=1, le=90)
+    book_invite_secret: SecretStr | None = Field(default=None, min_length=32)
+
+    @field_validator("llm_base_url")
+    @classmethod
+    def validate_llm_url(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("LLM_BASE_URL 必须为不含认证信息和查询参数的 HTTPS 地址")
+        return value.rstrip("/")
 
     @field_validator("database_url")
     @classmethod

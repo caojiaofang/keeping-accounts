@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import TopBar from '@/components/TopBar.vue'
+import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import BookSwitcher from '@/components/BookSwitcher.vue'
@@ -12,6 +14,8 @@ import type { EntryType } from '@/common/types'
 
 const store = useLedgerStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 const type = ref<EntryType>('expense')
 const palette = ['#50836a', '#8cb09a', '#c4d6ab', '#dfc18c', '#bd9980', '#9baec5', '#afa3bf', '#c7cbc7']
 const entries = computed(() => store.monthEntries.filter(entry => entry.type === type.value))
@@ -45,6 +49,7 @@ function openChat() { uni.navigateTo({ url: `/pages/assistant/index?mode=chat&mo
 <template>
   <view class="page">
     <TopBar title="收支统计" subtitle="让每一笔收支，变得更清晰。" />
+    <CloudStatus />
     <view class="between month-context"><view class="month-controls"><button aria-label="上个月" @tap="stepMonth(-1)"><AppIcon name="back" :size="26" /></button><MonthPicker v-model="store.selectedMonth" /><button aria-label="下个月" @tap="stepMonth(1)"><AppIcon name="chevron" :size="26" /></button></view><BookSwitcher /></view>
     <view class="type-switch"><button :class="{ active: type === 'expense' }" @tap="type = 'expense'">支出分析</button><button :class="{ active: type === 'income' }" @tap="type = 'income'">收入分析</button></view>
 

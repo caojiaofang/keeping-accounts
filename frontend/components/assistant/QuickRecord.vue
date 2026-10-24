@@ -20,21 +20,36 @@ const accounts = ['微信', '支付宝', '银行卡', '现金']
 const visibleCategories = computed(() => categories.filter(item => item.type === form.value?.type))
 const pending = computed(() => drafts.value.filter(item => item.status === 'pending'))
 const savedCount = computed(() => drafts.value.filter(item => item.status === 'saved').length)
+const recognizing = ref(false)
+const confirming = ref(false)
+const busy = computed(() => recognizing.value || confirming.value)
 
 async function recognize() {
+  if (busy.value) return
   if (!input.value.trim()) { error.value = '先写下一笔收支，或点选下方示例。'; return }
   if (pending.value.length) {
     uni.showModal({ title: '还有待确认的账单', content: '请先保存或忽略当前草稿，再生成新的账单。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
     return
   }
-  const example = createExampleDrafts(input.value, store.activeBookId)
-  if (!example) { error.value = '当前为静态演示，请选择下方示例体验。接入大模型后将支持自由输入。'; return }
+  recognizing.value = true
   error.value = ''
-  source.value = input.value.trim()
-  drafts.value = example
-  anchor.value = ''
-  await nextTick()
-  anchor.value = 'draft-results'
+  const text = input.value.trim()
+  try {
+    if (store.accountId) {
+      const result = await store.recognizeDrafts(text)
+      if (result.clarification || !result.drafts.length) { error.value = result.clarification || '请补充明确的收支金额'; return }
+      drafts.value = result.drafts
+    } else {
+      const example = createExampleDrafts(text, store.activeBookId)
+      if (!example) { error.value = '体验模式使用预置示例，微信登录后可以自由输入。'; return }
+      drafts.value = example
+    }
+    source.value = text
+    anchor.value = ''
+    await nextTick()
+    anchor.value = 'draft-results'
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : '识别失败，请重试' }
+  finally { recognizing.value = false }
 }
 function chooseExample(text: string) { input.value = text; error.value = '' }
 function editDraft(draft: AssistantDraft) {
@@ -59,17 +74,31 @@ function applyEdit() {
   Object.assign(draft, updated, { amount: Math.round(Number(amountText) * 100), note: updated.note.trim() })
   editingKey.value = ''
 }
-function saveDraft(draft: AssistantDraft) {
+async function saveDraft(draft: AssistantDraft) {
   if (draft.status !== 'pending') return false
-  const { key, status, ...entry } = draft
-  if (!store.saveEntry(entry)) return false
+  const { key, status, accountDefaulted, ...entry } = draft
+  if (!await store.saveEntry(entry, undefined, store.accountId ? key : undefined)) return false
   draft.status = 'saved'
   return true
 }
-function confirmOne(draft: AssistantDraft) { if (saveDraft(draft)) toast(store.storageAvailable ? '已保存到本地账本' : '已记下，本次仅在运行中保留') }
-function confirmAll() {
-  const results = pending.value.map(saveDraft)
-  if (results.every(Boolean)) toast(store.storageAvailable ? '账单已保存到本地' : '已记下，本次仅在运行中保留')
+async function confirmOne(draft: AssistantDraft) {
+  if (busy.value) return
+  confirming.value = true
+  try { if (await saveDraft(draft)) toast(store.accountId ? '已保存到云端账本' : store.storageAvailable ? '已保存到本地账本' : '已记下，本次仅在运行中保留') }
+  finally { confirming.value = false }
+}
+async function confirmAll() {
+  if (busy.value) return
+  confirming.value = true
+  const items = [...pending.value]
+  try {
+    let count = 0
+    for (const draft of items) {
+      if (!await saveDraft(draft)) { if (count) toast(`已保存 ${count} 笔，其余可重试`); return }
+      count++
+    }
+    toast(store.accountId ? '账单已保存到云端' : store.storageAvailable ? '账单已保存到本地' : '已记下，本次仅在运行中保留')
+  } finally { confirming.value = false }
 }
 function viewLedger() { uni.redirectTo({ url: '/pages/ledger/index' }) }
 </script>
@@ -82,10 +111,10 @@ function viewLedger() { uni.redirectTo({ url: '/pages/ledger/index' }) }
         <view class="between"><text class="input-label">这笔钱，花在哪儿了？</text><text class="input-count">{{ input.length }}/200</text></view>
         <textarea v-model="input" class="record-textarea" placeholder="例如：今天早上八点吃早餐8块钱" :maxlength="200" :auto-height="false" :adjust-position="true" :cursor-spacing="28" />
         <view class="input-footer"><text>也可以一次记下多笔收支</text><AppIcon name="note" :size="26" /></view>
-        <button class="primary-button recognize-button" @tap="recognize"><AppIcon name="check" :size="30" light />识别账单</button>
+        <button class="primary-button recognize-button" :disabled="busy" :loading="recognizing" @tap="recognize"><AppIcon name="check" :size="30" light />{{ recognizing ? '正在识别…' : '识别账单' }}</button>
       </view>
       <view v-if="error" class="inline-error"><AppIcon name="info" :size="27" /><text>{{ error }}</text></view>
-      <view class="example-heading"><text>选一句，体验一下</text><text class="example-hint">预置示例</text></view>
+      <view class="example-heading"><text>选一句，试试看</text><text class="example-hint">{{ store.accountId ? '也支持自由输入' : '预置示例' }}</text></view>
       <button v-for="example in recordExamples" :key="example.label" class="example-row" @tap="chooseExample(example.text)"><text class="example-label">{{ example.label }}</text><text class="example-text">{{ example.text }}</text><AppIcon name="plus" :size="25" /></button>
 
       <view v-if="drafts.length" id="draft-results" class="draft-results">
@@ -95,14 +124,14 @@ function viewLedger() { uni.redirectTo({ url: '/pages/ledger/index' }) }
           <view class="between"><view class="draft-category"><view class="draft-icon" :style="{ background: store.categoryOf(draft.categoryId).color }"><AppIcon :name="store.categoryOf(draft.categoryId).icon" :size="35" /></view><view><text class="draft-category-name">{{ store.categoryOf(draft.categoryId).name }}</text><text class="draft-type">{{ draft.type === 'expense' ? '支出' : '收入' }}</text></view></view><text class="draft-amount number" :class="{ income: draft.type === 'income' }">{{ draft.type === 'expense' ? '−' : '+' }}{{ money(draft.amount) }}</text></view>
           <view class="draft-note">{{ draft.note || '未填写备注' }}</view>
           <view class="draft-meta"><view><AppIcon name="calendar" :size="24" /><text>{{ draft.date }}{{ draft.time ? ` ${draft.time}` : '' }}</text></view><view><AppIcon name="wallet" :size="24" /><text>{{ draft.account }}</text></view></view>
-          <view class="draft-book">存入「{{ store.books.find(book => book.id === draft.bookId)?.name || '当前账本' }}」{{ source.includes('银行卡') ? '' : ' · 账户使用默认选项，可修改' }}</view>
-          <view v-if="draft.status === 'pending'" class="draft-actions"><button class="ignore-action" @tap="draft.status = 'dismissed'">忽略</button><button class="edit-action" @tap="editDraft(draft)"><AppIcon name="edit" :size="24" />修改</button><button class="confirm-action" @tap="confirmOne(draft)">确认记账</button></view>
-          <view v-else class="draft-state"><AppIcon :name="draft.status === 'saved' ? 'check' : 'close'" :size="25" /><text>{{ draft.status === 'saved' ? '已保存，本地明细与统计已更新' : '已忽略，未保存到账本' }}</text></view>
+          <view class="draft-book">存入「{{ store.books.find(book => book.id === draft.bookId)?.name || '当前账本' }}」{{ (store.accountId ? draft.accountDefaulted : !source.includes('银行卡')) ? ' · 账户使用默认选项，可修改' : '' }}</view>
+          <view v-if="draft.status === 'pending'" class="draft-actions"><button class="ignore-action" :disabled="busy" @tap="draft.status = 'dismissed'">忽略</button><button class="edit-action" :disabled="busy" @tap="editDraft(draft)"><AppIcon name="edit" :size="24" />修改</button><button class="confirm-action" :disabled="busy" @tap="confirmOne(draft)">确认记账</button></view>
+          <view v-else class="draft-state"><AppIcon :name="draft.status === 'saved' ? 'check' : 'close'" :size="25" /><text>{{ draft.status === 'saved' ? '已保存，明细与统计已更新' : '已忽略，未保存到账本' }}</text></view>
         </view>
-        <button v-if="pending.length > 1" class="primary-button batch-button" @tap="confirmAll">确认全部 {{ pending.length }} 笔</button>
+        <button v-if="pending.length > 1" class="primary-button batch-button" :disabled="busy" :loading="confirming" @tap="confirmAll">确认全部 {{ pending.length }} 笔</button>
         <button v-if="savedCount" class="secondary-button view-ledger" @tap="viewLedger">查看账本明细<AppIcon name="arrow" :size="28" /></button>
       </view>
-      <view class="demo-note"><AppIcon name="shield" :size="25" /><text>当前使用预置示例，确认后仅保存到本机。</text></view>
+      <view class="demo-note"><AppIcon name="shield" :size="25" /><text>{{ store.accountId ? '输入文本将发送给模型服务；识别仅生成草稿，确认后才保存到云端。' : '体验模式使用预置示例，确认后保存到本机。微信登录后可使用智能识别。' }}</text></view>
     </view>
     <view v-if="editingKey && form" class="sheet-mask" @tap="editingKey = ''"><view class="sheet edit-sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">修改账单草稿</text><button class="icon-button" aria-label="关闭修改草稿" @tap="editingKey = ''"><AppIcon name="close" :size="32" /></button></view><scroll-view scroll-y class="edit-fields">
       <view class="form-row"><text class="form-label">金额（元）</text><input v-model="form.amountText" class="edit-input number" type="digit" :maxlength="10" placeholder="输入金额" /></view>

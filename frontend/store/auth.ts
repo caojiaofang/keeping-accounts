@@ -42,14 +42,15 @@ export const useAuthStore = defineStore('auth', () => {
     useLedgerStore().switchAccount(null)
   }
 
-  function activate(value: AuthSession): void {
+  async function activate(value: AuthSession): Promise<void> {
     try { uni.setStorageSync(AUTH_STORAGE_KEY, value) }
     catch { throw new Error('本地空间不足，登录状态未保存，请清理空间后重试') }
-    useLedgerStore().switchAccount(value.user.id)
+    useLedgerStore().switchAccount(value.user.id, value.accessToken)
     session = value
     user.value = value.user
     lastVerified = Date.now()
     error.value = ''
+    await useLedgerStore().refreshCloud()
   }
 
   onUnauthorized(token => {
@@ -79,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
         uni.reLaunch({ url: '/pages/login/index' })
         return
       }
-      activate({ ...saved, user: current })
+      await activate({ ...saved, user: current })
     } catch (cause) {
       if (version === revision) error.value = cause instanceof Error ? cause.message : '登录验证失败，请重试'
     } finally {
@@ -114,7 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
         if (version !== revision) throw new Error('登录状态已变化，请重新尝试')
         const oldToken = session?.accessToken
-        activate({ accessToken: issuedToken, expiresAt: Date.now() + result.expires_in * 1000, user: result.user })
+        await activate({ accessToken: issuedToken, expiresAt: Date.now() + result.expires_in * 1000, user: result.user })
         if (oldToken && oldToken !== issuedToken) {
           void apiRequest('/api/v1/auth/logout', { method: 'POST', token: oldToken }).catch(() => {})
         }
@@ -158,6 +159,7 @@ export const useAuthStore = defineStore('auth', () => {
       clearLocal('登录已过期，请重新登录')
       uni.reLaunch({ url: '/pages/login/index' })
     } else if (Date.now() - lastVerified > 60000) await restore()
+    else await useLedgerStore().refreshCloud()
   }
 
   return { user, ready, restoring, loggingIn, loggingOut, isLoggedIn, busy, error, bootstrap, restore, login, logout, enterGuest, verifyIfNeeded }

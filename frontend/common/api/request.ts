@@ -10,16 +10,17 @@ let unauthorizedHandler: ((token: string) => void) | undefined
 export function onUnauthorized(handler: (token: string) => void): void { unauthorizedHandler = handler }
 
 export function apiRequest<T>(path: string, options: {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   data?: Record<string, unknown>
   token?: string
+  timeout?: number
 } = {}): Promise<T> {
   return new Promise((resolve, reject) => {
     uni.request({
       url: `${API_BASE_URL}${path}`,
       method: options.method || 'GET',
       data: options.data,
-      timeout: appConfig.requestTimeout,
+      timeout: options.timeout || appConfig.requestTimeout,
       header: options.token ? { Authorization: `Bearer ${options.token}` } : {},
       success(response) {
         if (response.statusCode >= 200 && response.statusCode < 300) {

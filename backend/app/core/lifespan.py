@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.connections import check_connections
+from app.integrations.llm import LlmClient
 from app.integrations.wechat import WeChatClient
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
             )
         )
         app.state.wechat = WeChatClient(settings, client)
+        app.state.llm = LlmClient(settings, client)
         if settings.database_url:
             engine = create_async_engine(
                 settings.database_url.get_secret_value(),

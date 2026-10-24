@@ -2,7 +2,7 @@
 
 基于 **Python 3.12 + FastAPI + SQLAlchemy 2 + PostgreSQL + Redis** 的后端基础框架，使用 Alembic 管理数据库迁移，在 Windows + PyCharm 中开发。
 
-当前已接入 z11 的 PostgreSQL 开发库和 Redis，并实现微信小程序 code 登录、当前用户查询和退出登录。用户表已通过 Alembic 迁移创建，账本、分类、账单、预算、统计和 AI 接口尚未实现，前端数据流程暂未切换。接口和 uni-app 调用示例见[微信登录说明](docs/wechat-login.md)。
+当前已实现微信登录、个人及共享账本、账单新增/编辑/删除、预算、邀请与成员管理、退出/转让/解散及操作记录。开发库与正式库均为 `0004_shared`，正式环境已独立配置 `BOOK_INVITE_SECRET`，详见[共享账本说明](docs/shared-books.md)。sub2api 使用 `gpt-6-luna`，推理强度固定为 `xhigh`；真实聊天分析及历史会话已接入，并遵循当前成员权限，详见[聊天消费分析](docs/chat-analysis.md)。自定义分类及独立统计 API 待开发。正式环境版本为 `20261024T121036Z`，详情见[上线记录](docs/releases/20261024T121036Z.md)。
 
 正式服务使用 Docker Compose 部署到 z11，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
 
@@ -40,16 +40,16 @@
 ```text
 backend/
 ├── app/
-│   ├── api/               # 路由、公共依赖，v1 中提供健康检查和微信登录
+│   ├── api/               # 路由、公共依赖，v1 提供健康检查、登录、个人及共享记账和助手
 │   ├── core/              # 环境配置、应用生命周期
 │   ├── db/                # SQLAlchemy 模型基类
-│   ├── models/            # 数据库模型，已包含微信用户表
+│   ├── models/            # 用户、账本、账单、成员、邀请、操作记录和会话
 │   ├── schemas/           # Pydantic 请求和响应结构
 │   ├── repositories/      # 用户数据访问、并发登录去重
-│   ├── services/          # 登录业务和 Redis 登录态管理
-│   ├── integrations/      # 微信 code2Session 适配，后续扩展模型调用
+│   ├── services/          # 登录、个人及共享记账、助手及 Redis 登录态管理
+│   ├── integrations/      # 微信 code2Session 与 sub2api 模型适配
 │   └── main.py            # 应用工厂 create_app
-├── alembic/               # 迁移环境，已包含 0001_users 用户表迁移
+├── alembic/               # 迁移环境，开发库已到 0004_shared
 ├── tests/                 # 无需数据库的框架检查
 ├── .env.example           # 可提交的配置示例
 ├── alembic.ini
@@ -82,12 +82,16 @@ backend/
 | `WECHAT_TIMEOUT_SECONDS` | 微信请求超时，默认 10 秒 |
 | `AUTH_SESSION_TTL_SECONDS` | 登录态有效期，默认 604800 秒（7 天） |
 | `AUTH_LOGIN_RATE_LIMIT` | 每个请求来源 IP 每分钟登录次数，默认 30 |
+| `BOOK_INVITE_SECRET` | 邀请专用密钥，至少 32 字符；开发与正式分别生成，轮换后旧邀请失效 |
+| `LLM_BASE_URL` / `LLM_API_KEY` | sub2api HTTPS 地址及后端专用密钥 |
+| `LLM_MODEL` / `LLM_API_MODE` | 默认 `gpt-6-luna` / `responses`；推理强度固定为 `xhigh` |
+| `LLM_TIMEOUT_SECONDS` | 单次模型请求超时，默认 45 秒 |
 
 未配置连接且保持 `CHECK_CONNECTIONS_ON_STARTUP=false` 时仍可独立启动。设为 `true` 后必须同时配置两项连接，启动时执行 PostgreSQL 只读查询和 Redis PING，检查失败则退出；不会自动建表或迁移。健康检查仅表示应用运行，不持续探测外部服务。服务退出时释放连接资源。
 
 配置校验限制 `development` / `test` 环境只连接 `keeping_accounts_dev` 并使用 `moji:dev:` 前缀；`production` 环境要求 `keeping_accounts_prod` 和 `moji:prod:`。这些是本应用的配置校验规则。
 
-公共依赖位于 `app/api/deps.py`。后续接口使用 `get_db` 获取请求级会话，由业务服务显式提交或使用 `session.begin()` 管理事务，依赖层不自动提交；未配置对应连接时返回 HTTP 503。`get_redis` 提供客户端，后续构造 key 时需要显式使用配置中的前缀，当前没有写入任何 key。
+公共依赖位于 `app/api/deps.py`。后续接口使用 `get_db` 获取请求级会话，由业务服务显式提交或使用 `session.begin()` 管理事务，依赖层不自动提交；未配置对应连接时返回 HTTP 503。`get_redis` 提供客户端，后续构造 key 时需要显式使用配置中的前缀，登录态、限流和智能识别已按用途写入带前缀及 TTL 的 key。
 
 日志使用 Python logging 和 Uvicorn 日志，不输出连接 URL 或密钥。Swagger、ReDoc 和 OpenAPI 当前启用，主要用于开发联调。
 
@@ -121,7 +125,7 @@ CHECK_CONNECTIONS_ON_STARTUP=true
 
 此命令只读查询 PostgreSQL 的当前数据库和账号，执行 Redis PING，并在当前前缀下创建一个 TTL 为 30 秒的随机探测 key，验证读写后立即删除。不会创建 PostgreSQL 业务表或读取现有业务数据。
 
-当前开发库已执行 `0001_users`，包含 `users` 表和 Alembic 版本记录。其他开发机器使用同一库时无需重复建表，`alembic upgrade head` 可重复执行。后续添加模型后，在 `app/models/__init__.py` 中导入对应模型，再从 `backend` 目录生成并审核迁移：
+当前开发库及正式库均已执行 `0004_shared`，在用户、账本、账单及会话表基础上新增 `book_members`、`book_invitations`、`book_activities`，补充账单修改人和时间。其他开发机器使用同一库时无需重复建表，`alembic upgrade head` 可重复执行。后续添加模型后，在 `app/models/__init__.py` 中导入对应模型，再从 `backend` 目录生成并审核迁移：
 
 ```powershell
 .\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "新增业务表"

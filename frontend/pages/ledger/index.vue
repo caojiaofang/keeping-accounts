@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { computed, ref, watch } from 'vue'
 import TopBar from '@/components/TopBar.vue'
+import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
@@ -11,10 +13,12 @@ import { useLedgerStore } from '@/store/ledger'
 import { categories } from '@/common/data/categories'
 import { money, toast } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
-import { activeMembers } from '@/common/services/shared-books'
+import { activeMembers, canManageBook } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 const filter = ref<'all' | EntryType>('all')
 const keyword = ref('')
 const searching = ref(false)
@@ -22,6 +26,8 @@ const categoryFilter = ref('')
 const categoryOpen = ref(false)
 const availableCategories = computed(() => categories.filter(category => filter.value === 'all' || category.type === filter.value))
 const budgetOpen = ref(false)
+const budgetVersion = ref<number>()
+watch(budgetOpen, open => { if (open) budgetVersion.value = store.activeBook.version })
 const filterTabs = [{ key: 'all' as const, label: '全部' }, { key: 'expense' as const, label: '支出' }, { key: 'income' as const, label: '收入' }]
 const filteredEntries = computed(() => store.monthEntries.filter(entry => {
   const matchesType = filter.value === 'all' || entry.type === filter.value
@@ -36,9 +42,10 @@ function chooseCategory() {
 }
 function selectCategory(id: string) { categoryFilter.value = id; categoryOpen.value = false }
 function setFilter(value: 'all' | EntryType) { filter.value = value; categoryFilter.value = '' }
-function saveBudget(value: string) {
+function openBudget() { if (!canManageBook(store.activeBook)) return toast('只有账本创建者可以设置共同预算'); budgetOpen.value = true }
+async function saveBudget(value: string) {
   if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  if (!store.updateBudget(Math.round(Number(value) * 100))) return
+  if (!await store.updateBudget(Math.round(Number(value) * 100), budgetVersion.value)) return
   budgetOpen.value = false
   toast('月预算已更新')
 }
@@ -51,6 +58,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
 <template>
   <view class="page">
     <TopBar title="墨记" subtitle="把日子，一笔一笔记好。" brand />
+    <CloudStatus />
     <view class="context-row"><MonthPicker v-model="store.selectedMonth" /><BookSwitcher /></view>
     <button v-if="store.activeBook.kind === 'shared'" class="shared-ledger-link" @tap="openSharedBook"><AppIcon name="home" :size="26" /><text>多人账本 · {{ activeMembers(store.activeBook).length }} 人一起记</text><text>成员与邀请</text><AppIcon name="chevron" :size="22" /></button>
 
@@ -66,7 +74,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
       </view>
     </view>
 
-    <button class="budget-card" @tap="budgetOpen = true">
+    <button class="budget-card" @tap="openBudget">
       <view class="budget-symbol"><AppIcon name="wallet" :size="35" /></view>
       <view class="budget-info"><view class="between"><text>月预算</text><text class="budget-remaining">{{ remaining >= 0 ? '还可支出' : '已超预算' }} <text class="number">¥{{ money(remaining) }}</text></text></view><view class="progress-track"><view class="progress-fill" :class="{ exceeded: remaining < 0 }" :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></view>
       <AppIcon name="chevron" :size="24" />

@@ -23,10 +23,10 @@ onLoad(options => {
     <view class="assistant-header">
       <TopBar title="墨记助手" back />
       <view class="mode-switch"><button class="mode-tab" :class="{ active: mode === 'record' }" @tap="mode = 'record'"><AppIcon name="edit" :size="29" />一句话记账</button><button class="mode-tab" :class="{ active: mode === 'chat' }" @tap="mode = 'chat'"><AppIcon name="chart" :size="29" />聊聊花费</button></view>
-      <view class="assistant-context"><view class="book-context"><AppIcon name="book" :size="24" /><text>{{ store.activeBook.name }}</text></view><text class="demo-label">页面演示 · 暂未接入大模型</text></view>
+      <view class="assistant-context"><view class="book-context"><AppIcon name="book" :size="24" /><text>{{ store.activeBook.name }}</text></view><text class="demo-label">{{ store.accountId ? (mode === 'record' ? '智能识别 · 确认后保存' : '云端账单 · 智能分析') : '示例演示' }}</text></view>
     </view>
     <view class="assistant-content" :style="{ display: mode === 'record' ? 'flex' : 'none' }"><QuickRecord /></view>
-    <view class="assistant-content" :style="{ display: mode === 'chat' ? 'flex' : 'none' }"><ExpenseChat :month="month" /></view>
+    <view class="assistant-content" :style="{ display: mode === 'chat' ? 'flex' : 'none' }"><ExpenseChat :month="month" :active="mode === 'chat'" /></view>
   </view>
 </template>
 

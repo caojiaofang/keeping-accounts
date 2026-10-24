@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import TopBar from '@/components/TopBar.vue'
+import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
@@ -10,6 +12,8 @@ import { activeMembers } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 const creating = ref(false)
 function stats(id: string) {
   const entries = store.entries.filter(entry => entry.bookId === id && entry.date.startsWith(store.selectedMonth))
@@ -21,10 +25,10 @@ function selectBook(id: string) {
   uni.redirectTo({ url: '/pages/ledger/index' })
 }
 function openSharedBooks() { uni.navigateTo({ url: '/pages/shared-books/index' }) }
-function createBook(name: string) {
+async function createBook(name: string) {
   if (!name) return toast('给新账本起个名字吧')
   if (store.books.some(book => book.name === name)) return toast('这个账本名字已经使用了')
-  store.addBook(name)
+  if (!await store.addBook(name)) return
   creating.value = false
   toast('新账本已创建')
 }
@@ -33,6 +37,7 @@ function createBook(name: string) {
 <template>
   <view class="page">
     <TopBar title="我的账本" subtitle="不同的生活，都有自己的章节。" />
+    <CloudStatus />
     <view class="books-intro"><view><text class="intro-title">把生活，分开记录。</text><text class="intro-copy">日常的烟火，旅途的风景，家的温度。</text></view><view class="intro-leaf"><AppIcon name="book" :size="65" /></view></view>
     <button class="shared-books-entry" @tap="openSharedBooks"><view class="shared-entry-symbol"><AppIcon name="home" :size="37" /></view><view class="shared-entry-copy"><text>多人账本</text><text>邀请爱人或家人，一起记好小家的日常</text></view><AppIcon name="chevron" :size="27" /></button>
     <view class="section-head"><text class="section-title">全部账本<text class="book-count">{{ store.books.length }}</text></text><text class="small muted">点击账本查看明细</text></view>

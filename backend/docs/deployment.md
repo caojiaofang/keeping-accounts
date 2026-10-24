@@ -1,5 +1,7 @@
 # z11 正式部署
 
+当前正式版本：`20261024T121036Z`，2026-10-24 20:13:56（北京时间）完成验证，数据库为 `0004_shared`。镜像、备份和检查结果见[上线记录](releases/20261024T121036Z.md)。
+
 后端通过 Docker Compose 运行，公网地址为 `https://mjzs.zf-yun.cn`。根路径跳转到 `/docs`；健康检查为 `/api/v1/health`，接口前缀为 `/api/v1`。
 
 ## 服务器目录与运行方式
@@ -48,6 +50,8 @@ curl --fail https://mjzs.zf-yun.cn/api/v1/health
 
 ## 更新后端
 
+共享账本版本需要执行至 `0004_shared` 迁移，并在服务器环境文件配置独立随机的 `BOOK_INVITE_SECRET`（至少 32 字符，不复用开发密钥）。模型配置保持 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL=gpt-6-luna`、`LLM_API_MODE=responses` 和 `LLM_TIMEOUT_SECONDS=45`；推理强度在代码中固定为 `xhigh`。使用本仓库的 Nginx 配置（读取超时 120 秒），有改动时检查后重载。密钥不放入部署包；迁移前先备份正式库和配置，保留旧镜像与版本目录。
+
 先在本机执行现有 pytest、Ruff 检查。每次更新创建新版本目录并保留旧镜像，避免覆盖正在运行的源码。以下在仓库根目录的 PowerShell 执行，仅打包部署所需文件：
 
 ```powershell
@@ -95,6 +99,6 @@ curl --fail https://mjzs.zf-yun.cn/api/v1/health
 
 ## 小程序接入
 
-将 `https://mjzs.zf-yun.cn` 添加到微信公众平台的小程序服务器域名中的 request 合法域名。前端通过 `uni.getAccountInfoSync()` 识别运行版本，仅 `release` 正式版固定连接该域名；开发版、体验版、未知版本和读取失败时使用本地开发地址，默认 `http://127.0.0.1:8000`。前端无需 `.env`，直接在 `frontend/common/config.ts` 的 `DEV_BASE_URL` 与 `PROD_BASE_URL` 中调整地址并重新编译。真实微信登录仍需小程序调用 `wx.login` 获取一次性 code，无法用固定 code 完成真实登录验证。
+将 `https://mjzs.zf-yun.cn` 添加到微信公众平台的小程序服务器域名中的 request 合法域名。前端通过 `uni.getAccountInfoSync()` 识别运行版本，仅 `develop` 开发版使用本地开发地址，默认 `http://127.0.0.1:8000`；`trial` 体验版、`release` 正式版及未知版本均连接正式域名。版本信息缺失、读取失败或非微信平台默认按开发版处理。前端无需 `.env`，直接在 `frontend/common/config.ts` 的 `DEV_BASE_URL` 与 `PROD_BASE_URL` 中调整地址并重新编译。真实微信登录仍需小程序调用 `wx.login` 获取一次性 code，无法用固定 code 完成真实登录验证。
 
-本次仅部署当前已有的健康检查和微信认证接口。账本、账单等尚未实现的后端接口不会因为部署而新增。
+正式后端现已包含微信认证、个人及共享账本、账单、预算、邀请与成员管理、操作记录、账本生命周期、智能记账和聊天分析接口，模型为 `gpt-6-luna`，推理强度固定为 `xhigh`。本次没有上传或发布微信小程序代码；小程序端需重新编译上传体验版或正式版，再完成两个微信账号的分享验收。

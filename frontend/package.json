@@ -12,7 +12,9 @@
     "check:assistant": "node scripts/check-assistant.mjs",
     "check:calendar": "node scripts/check-calendar.mjs",
     "check:shared-books": "node scripts/check-shared-books.mjs",
+    "check:shared-cloud": "node scripts/check-shared-cloud.mjs",
     "check:auth": "node scripts/check-auth.mjs",
+    "check:chat": "node scripts/check-chat.mjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

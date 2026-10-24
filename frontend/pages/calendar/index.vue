@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref, watch } from 'vue'
 import TopBar from '@/components/TopBar.vue'
+import CloudStatus from '@/components/CloudStatus.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
 import BookSwitcher from '@/components/BookSwitcher.vue'
@@ -12,6 +14,8 @@ import type { CalendarMode, ExpenseCalendarDay } from '@/common/services/expense
 
 const store = useLedgerStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 if (!isCalendarMonth(store.selectedMonth)) store.selectedMonth = localDate().slice(0, 7)
 const today = ref(localDate())
 const selectedDate = ref(selectedDateInMonth(store.selectedMonth, today.value, today.value))
@@ -56,6 +60,7 @@ function dayClass(day: ExpenseCalendarDay) {
 <template>
   <view class="page calendar-page">
     <TopBar title="消费日历" subtitle="一格一天，收支都看得见。" back />
+    <CloudStatus />
     <view class="calendar-context"><view class="month-controls"><button class="month-step" aria-label="上个月" :disabled="!canGoPrevious" @tap="stepMonth(-1)"><AppIcon name="back" :size="28" /></button><MonthPicker v-model="store.selectedMonth" /><button class="month-step" aria-label="下个月" :disabled="!canGoNext" @tap="stepMonth(1)"><AppIcon name="chevron" :size="28" /></button></view><BookSwitcher /></view>
     <view class="calendar-mode-switch"><button v-for="item in modes" :key="item.key" class="calendar-mode" :class="{ active: mode === item.key }" :aria-label="`显示${item.label}`" :aria-pressed="mode === item.key" @tap="mode = item.key">{{ item.label }}</button></view>
     <view class="calendar-panel panel">

@@ -3,6 +3,7 @@ import { localDate, money, monthLabel, shiftMonth } from '../utils/format'
 
 export type DraftStatus = 'pending' | 'saved' | 'dismissed'
 export interface AssistantDraft extends Omit<Entry, 'id' | 'createdAt'> {
+  accountDefaulted?: boolean
   key: string
   status: DraftStatus
 }
@@ -38,6 +39,7 @@ export const analysisQuestions: { topic: AnalysisTopic; text: string }[] = [
 ]
 
 export interface AnalysisResult {
+  entryType?: 'expense' | 'income'
   title: string
   text: string
   total: number
@@ -47,7 +49,7 @@ export interface AnalysisResult {
   footnote?: string
 }
 
-// 演示答案由当前账本真实的本地记录生成，不伪装成模型返回结果。
+// 演示答案由当前账本记录生成，不伪装成模型返回结果。
 export function buildDemoAnalysis(allEntries: Entry[], categories: Category[], month: string, topic: AnalysisTopic, categoryId?: string): AnalysisResult {
   const today = localDate()
   const inMonth = (target: string) => allEntries.filter(entry => entry.type === 'expense' && entry.date.startsWith(target) && (target !== today.slice(0, 7) || entry.date <= today))
@@ -81,7 +83,7 @@ export function buildDemoAnalysis(allEntries: Entry[], categories: Category[], m
     result.title = `${categoryOf(categoryId || 'food').name}消费明细`
     result.rows = [...selected].sort((a, b) => b.amount - a.amount).slice(0, 8).map(detailRow)
     result.text = `共记录${selected.length}笔，合计¥${money(total)}。下面按金额从高到低列出${result.rows.length}笔。`
-    result.footnote = '金额来自本地账单，明细最多展示8笔。'
+    result.footnote = '金额来自账本记录，明细最多展示8笔。'
     return result
   }
   if (topic === 'large') {

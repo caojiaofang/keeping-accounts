@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Entry } from '@/common/types'
 import { useLedgerStore } from '@/store/ledger'
 import { dateLabel, money } from '@/common/utils/format'
-import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
+import { canEditEntry, entryAuthor, entryEditor } from '@/common/services/shared-books'
 import AppIcon from './AppIcon.vue'
 const props = withDefaults(defineProps<{ entries: Entry[]; showDateHeadings?: boolean }>(), { showDateHeadings: true })
 const store = useLedgerStore()
@@ -15,6 +15,7 @@ const groups = computed(() => {
   })
 })
 function author(entry: Entry) { return entryAuthor(store.books.find(book => book.id === entry.bookId), entry) }
+function editor(entry: Entry) { return entryEditor(store.books.find(book => book.id === entry.bookId), entry) }
 function edit(entry: Entry) {
   if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) {
     uni.showModal({ title: '共同账单详情', content: `${store.categoryOf(entry.categoryId).name} · ${entry.type === 'income' ? '收入' : '支出'} ${money(entry.amount)} 元\n${entry.date}${entry.time ? ` ${entry.time}` : ''}\n记账人：${author(entry)}\n${entry.note || entry.account}\n\n这笔账单由其他成员记录，你可以查看。`, showCancel: false, confirmText: '知道了' })
@@ -37,7 +38,7 @@ function add() { uni.navigateTo({ url: '/pages/record/index' }) }
     <view class="entries-panel">
       <button v-for="entry in group.entries" :key="entry.id" class="entry" @tap="edit(entry)">
         <view class="category-icon" :style="{ background: store.categoryOf(entry.categoryId).color }"><AppIcon :name="store.categoryOf(entry.categoryId).icon" :size="39" /></view>
-        <view class="entry-info"><text class="entry-category">{{ store.categoryOf(entry.categoryId).name }}</text><text class="entry-note">{{ entry.note || entry.account }}</text><text v-if="author(entry)" class="entry-author">{{ author(entry) }}记账</text></view>
+        <view class="entry-info"><text class="entry-category">{{ store.categoryOf(entry.categoryId).name }}</text><text class="entry-note">{{ entry.note || entry.account }}</text><text v-if="author(entry)" class="entry-author">{{ author(entry) }}记账{{ editor(entry) ? ` · ${editor(entry)}修改` : '' }}</text></view>
         <view class="entry-amount"><text class="entry-number number" :class="{ 'is-income': entry.type === 'income' }">{{ entry.type === 'income' ? '+' : '−' }}{{ money(entry.amount) }}</text><text class="entry-account">{{ entry.time ? `${entry.time} · ` : '' }}{{ entry.account }}</text></view>
       </button>
     </view>

@@ -4,6 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
 import { safeLoginRedirect } from '@/common/services/auth'
 import { useAuthStore } from '@/store/auth'
+import { pendingInvitationPath } from '@/common/services/invitations'
 
 const auth = useAuthStore()
 const destination = ref('/pages/ledger/index')
@@ -16,7 +17,7 @@ function finish() {
   uni.reLaunch({ url: destination.value, fail() { leaving = false } })
 }
 
-onLoad(options => { destination.value = safeLoginRedirect(options?.redirect) })
+onLoad(options => { destination.value = safeLoginRedirect(options?.redirect || pendingInvitationPath()) })
 onShow(() => {
   leaving = false
   if (auth.user) finish()
@@ -34,7 +35,7 @@ function guest() { auth.enterGuest(); if (!auth.busy) finish() }
 function explain() {
   uni.showModal({
     title: '关于微信登录',
-    content: '墨记通过微信标识识别你的账号并保存登录状态，不获取头像、昵称或手机号。\n\n当前账单保存在此设备，按账号独立保存；体验数据不会自动转入登录账号。云端账单同步将在后续开放。',
+    content: '墨记通过微信标识识别你的账号并保存登录状态，不获取头像、昵称或手机号。\n\n登录后的个人账本和分析对话保存在云端，体验数据和升级前的本机记录不会自动上传。智能记账会发送输入文本，分析会按需发送统计或必要明细给模型服务；记账需确认，分析不修改账单。',
     showCancel: false,
     confirmText: '知道了',
     confirmColor: '#285e4e',

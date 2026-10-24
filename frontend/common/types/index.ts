@@ -9,6 +9,9 @@ export interface Category {
 }
 
 export interface Book {
+  ownerId?: string
+  currentUserId?: string
+  version?: number
   id: string
   name: string
   description: string
@@ -24,10 +27,11 @@ export interface BookMember {
   name: string
   color: string
   role: 'owner' | 'member'
-  status: 'active' | 'removed'
+  status: 'active' | 'removed' | 'left'
 }
 
 export interface BookInvitation {
+  id?: string
   token: string
   bookId: string
   expiresAt: number
@@ -35,6 +39,9 @@ export interface BookInvitation {
 }
 
 export interface Entry {
+  updatedBy?: string
+  updatedAt?: number
+  version?: number
   id: string
   bookId: string
   type: EntryType
@@ -46,4 +53,20 @@ export interface Entry {
   account: string
   createdAt: number
   createdBy?: string
+}
+
+export interface InvitationPreview {
+  bookId: string
+  bookName: string
+  inviterName: string
+  expiresAt: number
+}
+
+export interface BookActivity {
+  id: string
+  actorId: string
+  action: string
+  targetId?: string
+  payload: Record<string, unknown>
+  createdAt: number
 }

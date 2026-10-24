@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import CloudStatus from '@/components/CloudStatus.vue'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MemberAvatar from '@/components/MemberAvatar.vue'
@@ -10,31 +12,35 @@ import { money, toast } from '@/common/utils/format'
 
 const store = useLedgerStore()
 store.hydrate()
+onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void store.refreshCloud() })
 const creating = ref(false)
 const sharedBooks = computed(() => store.books.filter(book => book.kind === 'shared'))
 function openBook(id: string) { uni.navigateTo({ url: `/pages/shared-book/index?id=${encodeURIComponent(id)}` }) }
-function createBook(name: string) {
+async function createBook(name: string) {
   if (!name) return toast('给共同账本起个名字吧')
   if (store.books.some(book => book.name === name)) return toast('这个账本名字已经使用了')
-  const id = store.addBook(name, true)
+  const id = await store.addBook(name, true)
+  if (!id) return
   creating.value = false
   openBook(id)
 }
-function experience() { openBook(store.openFamilyExample()) }
+function experience() { const id = store.openFamilyExample(); if (id) openBook(id) }
 function previewJoin() { uni.navigateTo({ url: `/pages/book-invite/index?token=${FAMILY_INVITATION}` }) }
 </script>
 
 <template>
   <view class="page page-plain shared-books-page">
     <TopBar title="多人账本" subtitle="一家人的日常，一起记。" back />
+    <CloudStatus />
     <view class="family-intro">
       <view class="family-portrait"><MemberAvatar name="我" :size="104" /><view class="portrait-partner"><MemberAvatar name="家" color="#f1e3cf" :size="104" /></view><view class="portrait-home"><AppIcon name="home" :size="28" light /></view></view>
       <text class="family-title">把小家的日子，记在一起。</text>
       <text class="family-copy">买菜、房租、周末晚餐，谁记的每一笔都清清楚楚。邀请爱人或家人，共同照顾生活。</text>
       <button class="primary-button create-shared-book" @tap="creating = true"><AppIcon name="plus" :size="30" light />创建多人账本</button>
-      <button class="join-example" @tap="previewJoin">体验受邀加入<AppIcon name="chevron" :size="24" /></button>
+      <button v-if="!store.accountId" class="join-example" @tap="previewJoin">体验受邀加入<AppIcon name="chevron" :size="24" /></button>
     </view>
-    <view class="demo-notice"><AppIcon name="info" :size="27" /><text>本地演示：暂不支持跨设备邀请与同步。</text></view>
+    <view class="demo-notice"><AppIcon name="info" :size="27" /><text>{{ store.accountId ? '创建后可通过微信邀请家人，成员确认加入后共同记账。' : '当前为本地演示；微信登录后可创建真实共享账本。' }}</text></view>
     <view class="section-head"><text class="section-title">一起记的账本</text><text class="small muted">{{ sharedBooks.length }} 本</text></view>
     <button v-for="book in sharedBooks" :key="book.id" class="shared-book-card panel" @tap="openBook(book.id)">
       <view class="between"><view class="shared-name-row"><AppIcon name="home" :size="34" /><text class="shared-name">{{ book.name }}</text></view><AppIcon name="chevron" :size="26" /></view>
@@ -42,7 +48,7 @@ function previewJoin() { uni.navigateTo({ url: `/pages/book-invite/index?token=$
       <view class="shared-book-totals"><view><text>本月支出</text><text class="number">¥{{ money(memberTotals(store.entries, book.id, store.selectedMonth).expense) }}</text></view><view><text>本月收入</text><text class="number income-value">¥{{ money(memberTotals(store.entries, book.id, store.selectedMonth).income) }}</text></view></view>
     </button>
     <view v-if="!sharedBooks.length" class="shared-empty"><AppIcon name="book" :size="44" /><text class="empty-heading">共同的第一笔，从这里开始</text><text>创建后邀请家人，或者先看看家庭记账的样子。</text></view>
-    <button class="family-example" @tap="experience"><view><text>看看家庭账本示例</text><text class="example-copy">两位成员，三笔生活收支</text></view><AppIcon name="arrow" :size="33" /></button>
+    <button v-if="!store.accountId" class="family-example" @tap="experience"><view><text>看看家庭账本示例</text><text class="example-copy">两位成员，三笔生活收支</text></view><AppIcon name="arrow" :size="33" /></button>
     <PromptSheet :open="creating" title="创建多人账本" description="创建后，你可以管理成员和共同预算。" placeholder="例如：我们的小家、家庭日常" :maxlength="12" @close="creating = false" @confirm="createBook" />
   </view>
 </template>
