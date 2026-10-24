@@ -1,5 +1,5 @@
-import type { Entry, EntryType } from './types'
-import { localDate } from './format'
+import type { Entry, EntryType } from '../types'
+import { localDate } from '../utils/format'
 
 export type CalendarMode = 'all' | EntryType
 

@@ -82,7 +82,7 @@ openid 用于标识用户，不能代替登录凭证。后端先校验 Redis 登
 
 ## uni-app 调用示例
 
-前端已通过 `store/auth.ts` 和 `common/api.ts` 接入这些接口，提供登录页、状态恢复和退出登录。以下为接口调用示意，完整实现以实际前端代码为准。`API_BASE_URL` 替换为调试设备可访问的后端地址；默认 `127.0.0.1` 仅本机可访问，真机需另行配置。
+前端已通过 `store/auth.ts` 和 `common/api/request.ts` 接入这些接口，提供登录页、状态恢复和退出登录。以下为接口调用示意，完整实现以实际前端代码为准。`API_BASE_URL` 替换为调试设备可访问的后端地址；默认 `127.0.0.1` 仅本机可访问，真机需另行配置。
 
 ```javascript
 async function loginWithWeChat() {

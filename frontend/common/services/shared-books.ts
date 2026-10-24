@@ -1,5 +1,5 @@
-import type { Book, BookInvitation, BookMember, Entry } from './types'
-import { localDate } from './format'
+import type { Book, BookInvitation, BookMember, Entry } from '../types'
+import { localDate } from '../utils/format'
 
 // 本地演示身份；真实用户将由后端微信登录态确定。
 export const DEMO_USER_ID = 'demo-me'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppIcon from './AppIcon.vue'
-import { monthLabel } from '@/common/format'
+import { monthLabel } from '@/common/utils/format'
 defineProps<{ modelValue: string; compact?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 function change(event: { detail: { value: string } }) {

@@ -8,10 +8,10 @@ import BookSwitcher from '@/components/BookSwitcher.vue'
 import EntryList from '@/components/EntryList.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
-import { categories } from '@/common/mock'
-import { money, toast } from '@/common/format'
+import { categories } from '@/common/data/categories'
+import { money, toast } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
-import { activeMembers } from '@/common/shared-books'
+import { activeMembers } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 store.hydrate()

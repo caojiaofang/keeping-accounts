@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { API_BASE_URL, ApiError, apiRequest, onUnauthorized } from '@/common/api'
-import { isAuthSession, isAuthUser, requestWeChatCode } from '@/common/auth'
-import type { AuthSession, AuthUser, LoginResult } from '@/common/auth'
+import { API_BASE_URL, ApiError, apiRequest, onUnauthorized } from '@/common/api/request'
+import { isAuthSession, isAuthUser, requestWeChatCode } from '@/common/services/auth'
+import type { AuthSession, AuthUser, LoginResult } from '@/common/services/auth'
 import { useLedgerStore } from '@/store/ledger'
 
 // 按后端地址隔离凭证，开发服务与其他环境不会共用 token。

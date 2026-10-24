@@ -1,5 +1,6 @@
-// 前端只保存可公开的后端地址，微信 AppSecret 始终由后端管理。
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '')
+import { appConfig } from '@/common/config'
+
+export const API_BASE_URL = appConfig.apiBaseUrl
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status = 0) { super(message) }
@@ -18,7 +19,7 @@ export function apiRequest<T>(path: string, options: {
       url: `${API_BASE_URL}${path}`,
       method: options.method || 'GET',
       data: options.data,
-      timeout: 15000,
+      timeout: appConfig.requestTimeout,
       header: options.token ? { Authorization: `Bearer ${options.token}` } : {},
       success(response) {
         if (response.statusCode >= 200 && response.statusCode < 300) {

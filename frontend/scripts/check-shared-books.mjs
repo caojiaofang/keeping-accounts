@@ -5,15 +5,17 @@ import ts from 'typescript'
 
 const url = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const compile = async path => ts.transpileModule(await readFile(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
-const formatUrl = url(await compile('../common/format.ts'))
-const sharedUrl = url((await compile('../common/shared-books.ts')).replace("'./format'", `'${formatUrl}'`))
-const mockUrl = url((await compile('../common/mock.ts')).replace("'@/common/format'", `'${formatUrl}'`))
+const formatUrl = url(await compile('../common/utils/format.ts'))
+const sharedUrl = url((await compile('../common/services/shared-books.ts')).replace("'../utils/format'", `'${formatUrl}'`))
+const categoriesUrl = url(await compile('../common/data/categories.ts'))
+const mockUrl = url((await compile('../common/mock/ledger.ts')).replace("'@/common/utils/format'", `'${formatUrl}'`))
 const storeSource = (await compile('../store/ledger.ts'))
   .replace("'vue'", `'${import.meta.resolve('vue')}'`)
   .replace("'pinia'", `'${import.meta.resolve('pinia')}'`)
-  .replace("'@/common/format'", `'${formatUrl}'`)
-  .replace("'@/common/mock'", `'${mockUrl}'`)
-  .replace("'@/common/shared-books'", `'${sharedUrl}'`)
+  .replace("'@/common/utils/format'", `'${formatUrl}'`)
+  .replace("'@/common/data/categories'", `'${categoriesUrl}'`)
+  .replace("'@/common/mock/ledger'", `'${mockUrl}'`)
+  .replace("'@/common/services/shared-books'", `'${sharedUrl}'`)
 const { useLedgerStore } = await import(url(storeSource))
 const { activeMembers, canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, entryAuthor, familyExample, memberTotals, validInvitation } = await import(sharedUrl)
 const storage = new Map()

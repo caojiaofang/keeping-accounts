@@ -1,0 +1,10 @@
+*
+!requirements.txt
+!app/
+!app/**
+!alembic/
+!alembic/**
+!alembic.ini
+!check_connections.py
+**/__pycache__/
+**/*.py[cod]

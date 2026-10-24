@@ -2,7 +2,7 @@
 import { useLedgerStore } from '@/store/ledger'
 import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { activeMembers } from '@/common/shared-books'
+import { activeMembers } from '@/common/services/shared-books'
 const store = useLedgerStore()
 const open = ref(false)
 function choose(id: string) { store.selectBook(id); open.value = false }

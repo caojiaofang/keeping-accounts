@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
-import { analysisQuestions, buildDemoAnalysis } from '@/common/assistant-demo'
-import type { AnalysisResult, AnalysisTopic } from '@/common/assistant-demo'
-import { categories } from '@/common/mock'
+import { analysisQuestions, buildDemoAnalysis } from '@/common/mock/assistant'
+import type { AnalysisResult, AnalysisTopic } from '@/common/mock/assistant'
+import { categories } from '@/common/data/categories'
 import { useLedgerStore } from '@/store/ledger'
-import { money, monthLabel } from '@/common/format'
+import { money, monthLabel } from '@/common/utils/format'
 
 defineOptions({ options: { virtualHost: true } })
 const props = defineProps<{ month: string }>()

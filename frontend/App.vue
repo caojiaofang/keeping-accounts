@@ -7,5 +7,5 @@ onShow(() => { void useAuthStore().verifyIfNeeded() })
 </script>
 
 <style lang="scss">
-@import './common/styles.scss';
+@import './common/styles/index.scss';
 </style>

@@ -2,10 +2,10 @@
 import { computed, nextTick, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLedgerStore } from '@/store/ledger'
-import { categories } from '@/common/mock'
-import { createExampleDrafts, recordExamples } from '@/common/assistant-demo'
-import type { AssistantDraft } from '@/common/assistant-demo'
-import { money, toast } from '@/common/format'
+import { categories } from '@/common/data/categories'
+import { createExampleDrafts, recordExamples } from '@/common/mock/assistant'
+import type { AssistantDraft } from '@/common/mock/assistant'
+import { money, toast } from '@/common/utils/format'
 
 defineOptions({ options: { virtualHost: true } })
 const store = useLedgerStore()

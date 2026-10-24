@@ -7,7 +7,7 @@ import BookSwitcher from '@/components/BookSwitcher.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
 import DonutChart from '@/components/DonutChart.vue'
 import { useLedgerStore } from '@/store/ledger'
-import { localDate, money, shiftMonth } from '@/common/format'
+import { localDate, money, shiftMonth } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
 
 const store = useLedgerStore()

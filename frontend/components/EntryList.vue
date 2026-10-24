@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import type { Entry } from '@/common/types'
 import { useLedgerStore } from '@/store/ledger'
-import { dateLabel, money } from '@/common/format'
-import { canEditEntry, entryAuthor } from '@/common/shared-books'
+import { dateLabel, money } from '@/common/utils/format'
+import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
 import AppIcon from './AppIcon.vue'
 const props = withDefaults(defineProps<{ entries: Entry[]; showDateHeadings?: boolean }>(), { showDateHeadings: true })
 const store = useLedgerStore()

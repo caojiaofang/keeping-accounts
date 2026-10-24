@@ -5,9 +5,9 @@ import ts from 'typescript'
 // 直接检查 TypeScript 源码，无需启动 uni-app，也不读写用户的本地账单。
 const toModuleUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const transpile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
-const formatUrl = toModuleUrl(transpile(await readFile(new URL('../common/format.ts', import.meta.url), 'utf8')))
-const compiled = transpile(await readFile(new URL('../common/assistant-demo.ts', import.meta.url), 'utf8'))
-const { createExampleDrafts, recordExamples, buildDemoAnalysis } = await import(toModuleUrl(compiled.replace(/from (['"])\.\/format\1/g, `from '${formatUrl}'`)))
+const formatUrl = toModuleUrl(transpile(await readFile(new URL('../common/utils/format.ts', import.meta.url), 'utf8')))
+const compiled = transpile(await readFile(new URL('../common/mock/assistant.ts', import.meta.url), 'utf8'))
+const { createExampleDrafts, recordExamples, buildDemoAnalysis } = await import(toModuleUrl(compiled.replace(/from (['"])\.\.\/utils\/format\1/g, `from '${formatUrl}'`)))
 const categories = [
   { id: 'food', name: '餐饮', icon: 'food', color: '#fff', type: 'expense' },
   { id: 'house', name: '住房', icon: 'home', color: '#fff', type: 'expense' },

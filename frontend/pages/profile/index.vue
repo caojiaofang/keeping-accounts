@@ -7,9 +7,9 @@ import AppIcon from '@/components/AppIcon.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
-import { categories } from '@/common/mock'
-import { money, toast } from '@/common/format'
-import { entryAuthor } from '@/common/shared-books'
+import { categories } from '@/common/data/categories'
+import { money, toast } from '@/common/utils/format'
+import { entryAuthor } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 const auth = useAuthStore()

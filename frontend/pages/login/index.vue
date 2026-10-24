@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
-import { safeLoginRedirect } from '@/common/auth'
+import { safeLoginRedirect } from '@/common/services/auth'
 import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()

@@ -1,9 +1,10 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { categories, createDemoEntries, initialBooks } from '@/common/mock'
+import { categories } from '@/common/data/categories'
+import { createDemoEntries, initialBooks } from '@/common/mock/ledger'
 import type { Book, BookInvitation, Entry } from '@/common/types'
-import { localDate, toast } from '@/common/format'
-import { canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, familyExample, newSharedBook, validInvitation } from '@/common/shared-books'
+import { localDate, toast } from '@/common/utils/format'
+import { canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, familyExample, newSharedBook, validInvitation } from '@/common/services/shared-books'
 
 const STORAGE_KEY = 'moji-demo-v1'
 

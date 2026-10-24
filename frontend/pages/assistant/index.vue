@@ -6,7 +6,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import QuickRecord from '@/components/assistant/QuickRecord.vue'
 import ExpenseChat from '@/components/assistant/ExpenseChat.vue'
 import { useLedgerStore } from '@/store/ledger'
-import { localDate } from '@/common/format'
+import { localDate } from '@/common/utils/format'
 
 const store = useLedgerStore()
 store.hydrate()

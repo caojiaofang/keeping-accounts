@@ -14,7 +14,17 @@
 
 登录页已接入真实微信登录，提供加载状态、失败提示和重试。「我的」提供登录入口、登录状态、账号称呼及退出按钮；再次启动会先请求后端校验保存的凭证，再恢复账号。退出时调用后端注销当前 token，网络失败会保留当前状态并提示重试；凭证过期或收到 401 后回到登录页。
 
-默认后端地址为 `http://127.0.0.1:8000`，适合本机微信开发者工具与 PyCharm 联调。需要修改时，将 `.env.example` 复制为 `.env.local` 并配置 `VITE_API_BASE_URL`，重新编译生效。真机使用手机可访问的后端地址。本地 HTTP 调试需在当前开发者工具项目中配置域名校验，正式 `manifest.json` 仍保留 `urlCheck: true`。
+后端地址由 `common/config.ts` 中的 `appConfig` 统一管理，通过 `uni.getAccountInfoSync()` 识别微信小程序的运行版本：
+
+| 运行版本 | 后端地址 |
+| --- | --- |
+| `release`（正式版） | `https://mjzs.zf-yun.cn` |
+| `develop`（开发版）、`trial`（体验版） | 本地开发地址，默认 `http://127.0.0.1:8000` |
+| 未知版本、读取失败或非微信平台 | 同样使用本地开发地址 |
+
+前端无需 `.env` 文件，开发地址和正式地址直接在 `common/config.ts` 的 `DEV_BASE_URL` 与 `PROD_BASE_URL` 中配置，修改后重新编译生效。默认开发地址适合本机微信开发者工具与 PyCharm 联调；真机开发或体验版需改为手机可访问的本地开发服务器地址。发布构建也按运行时版本判断，上传为体验版后仍使用开发地址，正式版始终使用正式域名。
+
+本地 HTTP 调试需在当前开发者工具项目中配置域名校验，正式 `manifest.json` 仍保留 `urlCheck: true`。正式版需在微信公众平台将 `https://mjzs.zf-yun.cn` 添加为 request 合法域名。
 
 登录后账单仍只保存在本机，尚未开启云端同步。体验数据保留在 `moji-demo-v1`；账号数据存入 `moji-user-v1:<用户ID>:ledger`，昵称也按用户隔离。首次登录进入空的日常账本，不自动导入体验账单；退出后恢复体验区，重新登录恢复对应账号的本地记录。页面栈和内存记录随账号切换而重建。多人账本仍是本地演示。
 
@@ -28,7 +38,25 @@
 
 ```text
 frontend/
-├── common/              # 类型、金额与日期工具、演示数据、公共样式
+├── common/
+│   ├── api/
+│   │   └── request.ts             # HTTP 请求封装、错误处理与 401 回调
+│   ├── data/
+│   │   └── categories.ts          # 收支分类等静态业务数据
+│   ├── mock/
+│   │   ├── assistant.ts           # 助手预置记账与分析演示
+│   │   └── ledger.ts              # 初始账本与演示账单
+│   ├── services/
+│   │   ├── auth.ts                # 身份校验、登录跳转与微信 code 获取
+│   │   ├── expense-calendar.ts    # 收支日历计算
+│   │   └── shared-books.ts        # 多人账本规则与本地体验逻辑
+│   ├── styles/
+│   │   └── index.scss             # 全局公共样式，由 App.vue 引入
+│   ├── types/
+│   │   └── index.ts               # 账本、账单、分类与成员类型
+│   ├── utils/
+│   │   └── format.ts              # 金额、日期格式化与通用提示
+│   └── config.ts                  # 后端地址、环境识别与请求超时
 ├── components/          # 导航、账单列表、图表和弹层等组件
 ├── pages/               # 登录、明细、统计、账本、我的、记一笔、墨记助手、日历、多人账本
 ├── static/              # 本地 SVG 图标，不依赖远程图片
@@ -44,6 +72,8 @@ frontend/
 ```
 
 `manifest.json` 顶层 `appid` 是 HBuilderX 生成的 DCloud 应用标识，并非微信 AppID。微信 AppID 已配置在 `mp-weixin.appid`。
+
+公共模块按职责放入上述目录；页面状态仍由 `store/` 管理。后续出现可复用的 Vue 组合式逻辑时，再放入 `common/composables/`。uni-app 的主题变量入口保留在根目录 `uni.scss`。
 
 ## 已实现的本地交互
 
@@ -65,7 +95,7 @@ frontend/
 - 聊天分析：点选示例问题，展示当前账本的分类占比、分类明细、月度对比、超过200元的支出和消费提示。回答根据真实的本地账单计算，连续追问可继承分类范围。统计页进入时保留所选月份，首页进入时使用当前月份。
 - 任意自然语言识别与自由聊天等待后端接入，未支持的输入会说明演示范围，不伪造模型回答。对话仅保留在本次页面中，切换助手模式会保留内容，离开后重新进入则开始新对话。
 
-演示逻辑位于 `common/assistant-demo.ts`，交互组件位于 `components/assistant/`。后续使用 Python + FastAPI + PostgreSQL + Redis 后端接入 sub2api，数据库与 Redis 复用 z11 上的现有服务，按项目根目录的[项目方案说明](../项目方案说明.md)实施。
+演示逻辑位于 `common/mock/assistant.ts`，交互组件位于 `components/assistant/`。后续使用 Python + FastAPI + PostgreSQL + Redis 后端接入 sub2api，数据库与 Redis 复用 z11 上的现有服务，按项目根目录的[项目方案说明](../项目方案说明.md)实施。
 
 首次运行以当天为基准生成演示账单。此后读写本地存储，不会反复填充或重置数据。金额以整数分保存。当前账户仅是账单标签，不管理资金余额；预算为各账本的固定月预算。
 

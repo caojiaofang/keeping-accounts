@@ -7,8 +7,8 @@ import MemberAvatar from '@/components/MemberAvatar.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
 import EntryList from '@/components/EntryList.vue'
 import { useLedgerStore } from '@/store/ledger'
-import { activeMembers, canManageBook, DEMO_USER_ID, memberTotals, validInvitation } from '@/common/shared-books'
-import { localDate, money, toast } from '@/common/format'
+import { activeMembers, canManageBook, DEMO_USER_ID, memberTotals, validInvitation } from '@/common/services/shared-books'
+import { localDate, money, toast } from '@/common/utils/format'
 import type { BookMember } from '@/common/types'
 
 const store = useLedgerStore()

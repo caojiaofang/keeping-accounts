@@ -10,7 +10,7 @@ const compiled = new Map()
 async function moduleUrl(filename) {
   if (compiled.has(filename)) return compiled.get(filename)
   let source = ts.transpileModule(
-    (await readFile(filename, 'utf8')).replaceAll('import.meta.env.VITE_API_BASE_URL', JSON.stringify('http://127.0.0.1:8000')),
+    await readFile(filename, 'utf8'),
     { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } },
   ).outputText
   for (const match of [...source.matchAll(/from\s+(['"])([^'"]+)\1/g)]) {
@@ -26,8 +26,8 @@ async function moduleUrl(filename) {
 
 const { useAuthStore, AUTH_STORAGE_KEY } = await import(await moduleUrl(path.join(root, 'store/auth.ts')))
 const { useLedgerStore } = await import(await moduleUrl(path.join(root, 'store/ledger.ts')))
-const { apiRequest } = await import(await moduleUrl(path.join(root, 'common/api.ts')))
-const { safeLoginRedirect } = await import(await moduleUrl(path.join(root, 'common/auth.ts')))
+const { apiRequest } = await import(await moduleUrl(path.join(root, 'common/api/request.ts')))
+const { safeLoginRedirect } = await import(await moduleUrl(path.join(root, 'common/services/auth.ts')))
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 const storage = new Map()
 const sessions = new Map()

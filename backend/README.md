@@ -4,6 +4,8 @@
 
 当前已接入 z11 的 PostgreSQL 开发库和 Redis，并实现微信小程序 code 登录、当前用户查询和退出登录。用户表已通过 Alembic 迁移创建，账本、分类、账单、预算、统计和 AI 接口尚未实现，前端数据流程暂未切换。接口和 uni-app 调用示例见[微信登录说明](docs/wechat-login.md)。
 
+正式服务使用 Docker Compose 部署到 z11，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
+
 ## 在 PyCharm 中启动
 
 1. 使用 PyCharm 打开仓库根目录，或单独打开 `backend` 目录。
@@ -109,7 +111,7 @@ REDIS_KEY_PREFIX=moji:dev:
 CHECK_CONNECTIONS_ON_STARTUP=true
 ```
 
-连接 URL 中用户名和密码的特殊字符需要进行 URL 编码。正式环境同时配置 `APP_ENV=production`、正式库及 `REDIS_KEY_PREFIX=moji:prod:`，`APP_ENV` 本身不会切换数据库或 Redis 前缀，正式账号与部署配置另行准备。
+连接 URL 中用户名和密码的特殊字符需要进行 URL 编码。正式环境同时配置 `APP_ENV=production`、正式库及 `REDIS_KEY_PREFIX=moji:prod:`，`APP_ENV` 本身不会切换数据库或 Redis 前缀。正式账号与部署配置见[部署说明](docs/deployment.md)。
 
 从 `backend` 目录验证真实连接，也可在 PyCharm 中直接运行 `check_connections.py`：
 

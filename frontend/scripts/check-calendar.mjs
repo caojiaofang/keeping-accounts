@@ -4,9 +4,9 @@ import ts from 'typescript'
 
 const toUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const transpile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
-const formatUrl = toUrl(transpile(await readFile(new URL('../common/format.ts', import.meta.url), 'utf8')))
-const compiled = transpile(await readFile(new URL('../common/expense-calendar.ts', import.meta.url), 'utf8'))
-const { buildExpenseCalendar, calendarAmount, filterCalendarEntries, selectedDateInMonth, isCalendarDate, isCalendarMonth } = await import(toUrl(compiled.replace(/from (['"])\.\/format\1/g, `from '${formatUrl}'`)))
+const formatUrl = toUrl(transpile(await readFile(new URL('../common/utils/format.ts', import.meta.url), 'utf8')))
+const compiled = transpile(await readFile(new URL('../common/services/expense-calendar.ts', import.meta.url), 'utf8'))
+const { buildExpenseCalendar, calendarAmount, filterCalendarEntries, selectedDateInMonth, isCalendarDate, isCalendarMonth } = await import(toUrl(compiled.replace(/from (['"])\.\.\/utils\/format\1/g, `from '${formatUrl}'`)))
 const entry = (id, date, amount, type = 'expense', bookId = 'test') => ({ id, date, amount, type, bookId, categoryId: 'food', note: id, account: '微信', createdAt: 1 })
 const today = '2026-10-23'
 const records = [entry('早餐', today, 800), entry('午餐', today, 2550), entry('收入', today, 100000, 'income'), entry('昨天', '2026-10-22', 100), entry('上月', '2026-09-23', 99999), entry('其他账本', today, 900000, 'expense', 'other'), entry('无效日期', '2026-10-32', 50000)]
