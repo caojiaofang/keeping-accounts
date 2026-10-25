@@ -23,6 +23,7 @@ const messages = computed<Message[]>(() => store.accountId ? [
     { id: `${turn.id}-assistant`, role: 'assistant' as const, text: turn.answer, result: turn.result, bookName: store.activeBook.name },
   ]),
   ...(chat.pending ? [{ id: chat.pending.id, role: 'user' as const, text: chat.pending.text }] : []),
+  ...(chat.preview ? [{ id: 'stream-preview', role: 'assistant' as const, text: chat.preview.answer, result: chat.preview.result, bookName: store.activeBook.name }] : []),
 ] : demoMessages.value)
 let loadedScope = ''
 const input = ref('')
@@ -59,6 +60,7 @@ async function scrollToBottom() {
   await nextTick()
   anchor.value = 'conversation-end'
 }
+watch(() => chat.preview?.answer, () => { void scrollToBottom() })
 async function ask(text: string, topic?: AnalysisTopic, categoryId?: string) {
   if (store.accountId) {
     if (busy.value || !text.trim()) return
@@ -127,7 +129,8 @@ async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpe
             </view>
           </view>
         </view>
-        <view v-if="store.accountId && busy" class="chat-status">{{ chat.sending ? '正在查询账单并分析…' : '正在读取对话…' }}</view>
+        <view v-if="store.accountId && busy" class="chat-status">{{ chat.sending ? chat.progress || '正在分析…' : '正在读取对话…' }}</view>
+        <view v-if="store.accountId && chat.preview && !chat.sending" class="chat-status">以上为尚未确认保存的回答，可重新读取或重试。</view>
         <view v-if="store.accountId && chat.error" class="chat-error"><text>{{ chat.error }}</text><view><button v-if="chat.pending" :disabled="busy" @tap="ask(chat.pending.text)">重试这条消息</button><button :disabled="busy" @tap="reload">重新读取</button></view></view>
         <view v-if="messages.length" class="followup"><text class="followup-caption">接着问问</text><view class="followup-list"><button v-for="question in suggestions" :key="question.text" class="followup-question" :disabled="blocked" @tap="ask(question.text, question.topic, question.categoryId)">{{ question.text }}<AppIcon name="plus" :size="22" /></button></view></view>
         <view id="conversation-end" class="conversation-end" />

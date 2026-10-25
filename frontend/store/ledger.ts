@@ -6,6 +6,8 @@ import type { Book, BookActivity, BookInvitation, Entry } from '@/common/types'
 import { localDate, toast } from '@/common/utils/format'
 import { canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, familyExample, newSharedBook, validInvitation } from '@/common/services/shared-books'
 import { API_BASE_URL, apiRequest } from '@/common/api/request'
+import { chatStream } from '@/common/api/chat-stream'
+import type { ChatStreamEvent } from '@/common/types/chat'
 import { newId } from '@/common/utils/id'
 import type { AssistantDraft } from '@/common/mock/assistant'
 
@@ -185,6 +187,11 @@ export const useLedgerStore = defineStore('ledger', () => {
     const result = await apiRequest<T>(path, { token: cloudToken })
     if (user !== accountId.value) throw new Error('账号已变化，请重新读取')
     return result
+  }
+
+  function streamChat(path: string, data: Record<string, unknown>, receive: (event: ChatStreamEvent) => void) {
+    if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
+    return chatStream(`/api/v1/assistant${path}`, cloudToken, data, receive)
   }
 
   function saveEntry(entry: Omit<Entry, 'id' | 'createdAt' | 'createdBy' | 'updatedBy' | 'updatedAt'>, id?: string, requestId?: string): boolean | Promise<boolean> {
@@ -384,5 +391,5 @@ export const useLedgerStore = defineStore('ledger', () => {
     return categories.find(category => category.id === id) || categories[11]
   }
 
-  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, recognizeDrafts, chatRequest, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
+  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, recognizeDrafts, chatRequest, streamChat, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
 })

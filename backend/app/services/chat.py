@@ -4,10 +4,12 @@ import asyncio
 import json
 import logging
 import re
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
+from contextlib import aclosing, asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import anyio
 from pydantic import ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy import func, select, update
@@ -31,6 +33,7 @@ from app.services.assistant import AssistantService
 from app.services.sessions import LOGIN_RATE_SCRIPT
 
 logger = logging.getLogger(__name__)
+STREAM_HEARTBEAT_SECONDS = 10
 UNLOCK = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
@@ -62,6 +65,30 @@ EXPLAIN_PROMPT = """你是墨记消费分析助手。只依据给定的后端计
 不得自行写任何阿拉伯数字、金额或百分比，也不要把数值写成中文数字，不使用不存在的占位符。
 可以不使用占位符，只作有数据支持的定性解释。最多三句话，返回JSON对象text。"""
 REFERENCE = re.compile(r"\{\{([A-Za-z][A-Za-z0-9.]*)\}\}")
+
+
+def explanation_prefix(raw: str) -> str:
+    """从未完成的 JSON 中取完整句子，转义或占位符未收全时继续等待。"""
+    match = re.match(r'^\s*\{\s*"text"\s*:\s*"', raw)
+    if not match:
+        return ""
+    content, index = "", match.end()
+    while index < len(raw):
+        char = raw[index]
+        if char == '"':
+            break
+        if char == "\\":
+            length = 6 if raw[index + 1 : index + 2] == "u" else 2
+            escape = raw[index : index + length]
+            if len(escape) < length:
+                break
+            content += json.loads('"' + escape + '"')
+            index += length
+        else:
+            content += char
+            index += 1
+    ends = list(re.finditer(r"[。！？!?\n]", content))
+    return content[: ends[-1].end()] if ends else ""
 
 
 def business_today():
@@ -184,7 +211,9 @@ class ChatService(AssistantService):
         key = f"{self.settings.redis_key_prefix}assistant:chat-lock:{conversation_id}"
         value = uuid4().hex
         try:
-            acquired = await self.redis.set(key, value, ex=120, nx=True)
+            acquired = await self.redis.set(
+                key, value, ex=int(self.settings.chat_timeout_seconds) + 60, nx=True
+            )
         except RedisError:
             raise ServiceError(503, "聊天服务暂时不可用，请稍后重试") from None
         if not acquired:
@@ -197,7 +226,49 @@ class ChatService(AssistantService):
             except RedisError:
                 logger.warning("会话锁暂未释放，将按有效期自动清理")
 
-    async def send(self, conversation_id: UUID, body: SendMessage) -> TurnResponse:
+    async def events(self, conversation_id: UUID, body: SendMessage):
+        """流与任务同生共灭；等待模型时每十秒发心跳，断连时取消上游请求。"""
+        queue = asyncio.Queue(maxsize=32)
+
+        async def emit(kind, data):
+            await queue.put((kind, data))
+
+        async def produce():
+            try:
+                result = await self.send(conversation_id, body, emit)
+                await emit("done", result.model_dump(mode="json", by_alias=True))
+            except ServiceError as error:
+                await emit("error", {"status": error.status_code, "detail": error.detail})
+            except Exception:
+                logger.exception("流式分析异常")
+                await emit("error", {"status": 500, "detail": "分析暂时不可用，请稍后重试"})
+
+        task = asyncio.create_task(produce())
+        try:
+            yield {"event": "status", "data": {"text": "正在理解你的问题…"}}
+            while True:
+                try:
+                    kind, data = await asyncio.wait_for(
+                        queue.get(), timeout=STREAM_HEARTBEAT_SECONDS
+                    )
+                except TimeoutError:
+                    yield {"event": "ping", "data": {}}
+                    continue
+                yield {"event": kind, "data": data}
+                if kind in {"done", "error"}:
+                    break
+        finally:
+            # 屏蔽 ASGI 断连的重复取消，等待上游、事务、会话锁清理再退出依赖。
+            with anyio.CancelScope(shield=True):
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    async def send(
+        self,
+        conversation_id: UUID,
+        body: SendMessage,
+        emit: Callable[[str, dict], Awaitable[None]] | None = None,
+    ) -> TurnResponse:
         await self.require_conversation(conversation_id)
         cached = await self.existing(conversation_id, body)
         if cached:
@@ -230,9 +301,15 @@ class ChatService(AssistantService):
             if count > 10:
                 raise ServiceError(429, "提问次数过多，请一分钟后重试", {"Retry-After": "60"})
             today = business_today()
+            card = None
             try:
-                async with asyncio.timeout(self.settings.llm_timeout_seconds):
-                    raw = await self.llm.structured(
+                budget = (
+                    self.settings.chat_timeout_seconds
+                    if emit
+                    else self.settings.llm_timeout_seconds
+                )
+                async with asyncio.timeout(budget):
+                    raw = await self.query_model(
                         PLAN_PROMPT.format(today=today),
                         json.dumps(
                             {
@@ -243,6 +320,7 @@ class ChatService(AssistantService):
                             ensure_ascii=False,
                         ),
                         QueryPlan.model_json_schema(),
+                        streaming=bool(emit),
                     )
                     plan = QueryPlan.model_validate(raw)
                     context, card = previous, None
@@ -259,10 +337,22 @@ class ChatService(AssistantService):
                             "也可以给出消费建议。"
                         )
                     else:
+                        if emit:
+                            await emit("status", {"text": "正在查询账单…"})
                         context = resolve_context(plan, previous, today)
                         card = await AnalysisQueries(self.ledger).run(book_id, context, plan, today)
                         await self.ledger.session.rollback()
                         answer = card.text
+                        if emit:
+                            await self.require_conversation(conversation_id)
+                            await self.ledger.session.rollback()
+                            await emit(
+                                "snapshot",
+                                {
+                                    "answer": answer,
+                                    "result": card.model_dump(by_alias=True),
+                                },
+                            )
                         if card.count or any(row.amount for row in card.rows):
                             references = {"total": yuan(card.total), "count": str(card.count)}
                             for index, row in enumerate(card.rows, 1):
@@ -271,24 +361,35 @@ class ChatService(AssistantService):
                                 references[prefix + "amount"] = yuan(row.amount)
                                 if row.percent is not None:
                                     references[prefix + "percent"] = f"{row.percent:g}%"
-                            interpretation = Explanation.model_validate(
-                                await self.llm.structured(
-                                    EXPLAIN_PROMPT,
-                                    json.dumps(
-                                        {
-                                            "question": body.text,
-                                            "facts": card.model_dump(by_alias=True),
-                                            "references": references,
-                                        },
-                                        ensure_ascii=False,
-                                    ),
-                                    Explanation.model_json_schema(),
-                                )
+                            explanation_input = json.dumps(
+                                {
+                                    "question": body.text,
+                                    "facts": card.model_dump(by_alias=True),
+                                    "references": references,
+                                },
+                                ensure_ascii=False,
                             )
-                            answer += "\n\n" + render_explanation(interpretation.text, references)
+                            if emit:
+                                await emit("status", {"text": "统计已完成，正在补充分析…"})
+                                extra = await self.stream_explanation(
+                                    explanation_input, references, emit, conversation_id
+                                )
+                            else:
+                                interpretation = Explanation.model_validate(
+                                    await self.llm.structured(
+                                        EXPLAIN_PROMPT,
+                                        explanation_input,
+                                        Explanation.model_json_schema(),
+                                    )
+                                )
+                                extra = render_explanation(interpretation.text, references)
+                            answer += "\n\n" + extra
                             card.text = answer
             except TimeoutError:
-                raise ServiceError(504, "分析超时，请稍后重试") from None
+                if not emit or card is None:
+                    raise ServiceError(504, "分析超时，请稍后重试") from None
+                answer = card.text + "\n\n补充分析耗时较长，已保留账单统计结果。"
+                card.text = answer
             except ValidationError:
                 raise ServiceError(502, "分析结果不完整，请换一种说法后重试") from None
             # 再次校验权限和会话版本，原子保存完整问答及下一轮上下文。
@@ -323,3 +424,44 @@ class ChatService(AssistantService):
             response = turn_response(turn)
             await self.ledger.session.commit()
             return response
+
+    async def query_model(self, instructions, text, schema, streaming=False):
+        if not streaming:
+            return await self.llm.structured(instructions, text, schema)
+        raw = ""
+        async with aclosing(self.llm.structured_stream(instructions, text, schema)) as stream:
+            async for delta in stream:
+                raw += delta
+        try:
+            return json.loads(raw)
+        except ValueError:
+            raise ServiceError(502, "分析结果不完整，请换一种说法后重试") from None
+
+    async def stream_explanation(self, text, references, emit, conversation_id):
+        raw, sent = "", ""
+        try:
+            async with aclosing(
+                self.llm.structured_stream(EXPLAIN_PROMPT, text, Explanation.model_json_schema())
+            ) as stream:
+                async for delta in stream:
+                    raw += delta
+                    prefix = render_explanation(explanation_prefix(raw), references)
+                    if prefix and prefix != sent:
+                        await self.require_conversation(conversation_id)
+                        await self.ledger.session.rollback()
+                        await emit(
+                            "delta", {"text": ("\n\n" if not sent else "") + prefix[len(sent) :]}
+                        )
+                        sent = prefix
+            final = render_explanation(Explanation.model_validate_json(raw).text, references)
+        except ServiceError as error:
+            if error.status_code not in {429, 502, 503, 504}:
+                raise
+            return "补充分析暂时不可用，已保留账单统计结果。"
+        except (ValueError, ValidationError):
+            return "补充分析暂时不可用，已保留账单统计结果。"
+        if final != sent:
+            await self.require_conversation(conversation_id)
+            await self.ledger.session.rollback()
+            await emit("delta", {"text": ("\n\n" if not sent else "") + final[len(sent) :]})
+        return final

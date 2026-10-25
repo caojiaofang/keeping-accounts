@@ -8,6 +8,7 @@ export class ApiError extends Error {
 
 let unauthorizedHandler: ((token: string) => void) | undefined
 export function onUnauthorized(handler: (token: string) => void): void { unauthorizedHandler = handler }
+export function notifyUnauthorized(token: string): void { unauthorizedHandler?.(token) }
 
 export function apiRequest<T>(path: string, options: {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'

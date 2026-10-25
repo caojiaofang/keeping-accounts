@@ -9,7 +9,7 @@ const { useLedgerStore } = await import(await moduleUrl(path.join(root, 'store/l
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 const storage = new Map(), sessions = new Map(), conversations = new Map()
 const users = ['1', '2'].map(n => ({ id: `${n.repeat(8)}-${n.repeat(4)}-4${n.repeat(3)}-8${n.repeat(3)}-${n.repeat(12)}`, openid: 'mock-' + n, created_at: '2026-10-24T00:00:00Z', last_login_at: '2026-10-24T00:00:00Z' }))
-let identity = users[0], sequence = 0, modelCalls = 0, handler
+let identity = users[0], sequence = 0, modelCalls = 0, handler, streamGate, aborts = 0
 const book = user => ({ id: 'book-' + user.id, name: '日常账本', budget: 500000, version: 1, kind: 'personal', icon: 'leaf', color: '#e1eee7', description: '' })
 const fail = (statusCode, detail) => ({ statusCode, data: { detail } })
 const ok = data => ({ statusCode: 200, data: clone(data) })
@@ -37,7 +37,7 @@ async function server(options) {
   const id = pathname.slice(prefix.length + 1).split('/')[0]
   const conversation = conversations.get(id)
   if (!conversation || conversation.ownerId !== user.id) return fail(404, '会话不存在')
-  if (pathname.endsWith('/messages')) {
+  if (/\/messages(?:\/stream)?$/.test(pathname)) {
     const existing = conversation.turns.find(t => t.id === options.data.id)
     if (existing) return existing.text === options.data.text ? ok(existing) : fail(409, '此消息已处理')
     modelCalls++
@@ -56,11 +56,34 @@ globalThis.getCurrentPages = () => [{ route: 'pages/assistant/index' }]
 globalThis.uni = {
   getStorageSync: key => clone(storage.get(key)), setStorageSync: (key, value) => storage.set(key, clone(value)), removeStorageSync: key => storage.delete(key),
   showToast() {}, reLaunch() {}, login(options) { options.success({ code: 'mock-code' }) },
-  request(options) { Promise.resolve().then(() => handler(options)).then(result => options.success(result), () => options.fail({})) },
+  request(options) {
+    let receive, aborted = false
+    Promise.resolve().then(() => handler(options)).then(async result => {
+      if (aborted) return
+      if (!options.enableChunked || result.statusCode !== 200) { options.success(result); return }
+      assert.equal(options.timeout, 300000)
+      const frame = (event, data) => {
+        const bytes = Buffer.from(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        // 故意拆开中文 UTF-8 字节、JSON 转义和 SSE 帧边界。
+        for (let i = 0; i < bytes.length; i += 7) {
+          const part = bytes.subarray(i, i + 7)
+          receive?.({ data: part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength) })
+        }
+      }
+      frame('status', { text: '正在补充分析…' })
+      frame('snapshot', { answer: '统计已完成。', result: result.data.result })
+      frame('delta', { text: '\n\n先核对餐饮记录。' })
+      if (streamGate) await streamGate(options)
+      if (aborted) return
+      frame('done', result.data)
+      options.success({ statusCode: 200, data: new ArrayBuffer(0) })
+    }).catch(() => { if (!aborted) options.fail({}) })
+    return { onChunkReceived(listener) { receive = listener }, abort() { aborted = true; aborts++; options.fail({}) } }
+  },
 }
 const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 async function fresh() {
-  storage.clear(); sessions.clear(); conversations.clear(); identity = users[0]; sequence = 0; modelCalls = 0; handler = server
+  storage.clear(); sessions.clear(); conversations.clear(); identity = users[0]; sequence = 0; modelCalls = 0; handler = server; streamGate = undefined; aborts = 0
   setActivePinia(createPinia())
   const auth = useAuthStore(); await auth.bootstrap(); await auth.login()
   const ledger = useLedgerStore(), chat = useChatStore()
@@ -85,7 +108,7 @@ await check('并发点击只发送一次，回复丢失后重试复用消息ID�
   let lostId
   handler = async options => {
     const response = await server(options)
-    if (new URL(options.url).pathname.endsWith('/messages')) { lostId = options.data.id; throw new Error('response lost') }
+    if (/\/messages(?:\/stream)?$/.test(new URL(options.url).pathname)) { lostId = options.data.id; throw new Error('response lost') }
     return response
   }
   assert.deepEqual(await Promise.all([chat.send('餐饮呢'), chat.send('餐饮呢')]), [false, false])
@@ -131,7 +154,7 @@ await check('账号切换立即清空对话，迟到的分析响应不能写入�
   let release
   handler = async options => {
     const result = await server(options)
-    if (new URL(options.url).pathname.endsWith('/messages')) await new Promise(resolve => { release = resolve })
+    if (/\/messages(?:\/stream)?$/.test(new URL(options.url).pathname)) await new Promise(resolve => { release = resolve })
     return result
   }
   const sending = chat.send('餐饮明细')
@@ -158,6 +181,88 @@ await check('历史读取失败不伪造回答，可以保留同一会话重新�
   handler = server
   assert.equal(await chat.read(id), true)
   assert.equal(chat.turns.length, 1)
+})
+
+await check('流式统计和正文在结束前展示，收到 done 才转入正式历史', async () => {
+  const { chat } = await fresh()
+  let release
+  streamGate = () => new Promise(resolve => { release = resolve })
+  const sending = chat.send('看看餐饮')
+  await tick()
+  assert.equal(chat.sending, true)
+  assert.equal(chat.turns.length, 0)
+  assert.equal(chat.preview.result.total, 2050)
+  assert.equal(chat.preview.answer, '统计已完成。\n\n先核对餐饮记录。')
+  assert.equal(chat.progress, '正在补充分析…')
+  release()
+  assert.equal(await sending, true)
+  assert.equal(chat.preview, undefined)
+  assert.equal(chat.turns.length, 1)
+})
+
+await check('已有流式预览时切换账号会取消连接，迟到的分片不会恢复预览', async () => {
+  const { chat, auth } = await fresh()
+  let release
+  streamGate = () => new Promise(resolve => { release = resolve })
+  const sending = chat.send('看看餐饮')
+  await tick()
+  assert.ok(chat.preview)
+  auth.enterGuest()
+  assert.equal(aborts, 1)
+  assert.equal(chat.preview, undefined)
+  release()
+  assert.equal(await sending, false)
+  assert.equal(chat.turns.length, 0)
+})
+
+await check('断流保留未确认预览及原消息ID，重新读取恢复正式答案', async () => {
+  const { chat } = await fresh()
+  streamGate = async () => { throw new Error('网络中断') }
+  assert.equal(await chat.send('看看餐饮'), false)
+  assert.ok(chat.preview)
+  assert.ok(chat.pending)
+  assert.equal(chat.turns.length, 0)
+  assert.ok(chat.error)
+  assert.equal(await chat.read(chat.conversationId), true)
+  assert.equal(chat.preview, undefined)
+  assert.equal(chat.pending, undefined)
+  assert.equal(chat.turns.length, 1)
+})
+
+await check('UTF-8 中文和表情跨字节解码，SSE 多帧及 CRLF 任意拆分保持完整', async () => {
+  const { StreamDecoder, ChatEventParser } = await import(await moduleUrl(path.join(root, 'common/api/chat-stream.ts')))
+  const decoder = new StreamDecoder(), events = []
+  const parser = new ChatEventParser(event => events.push(event))
+  const source = ': 心跳\r\n\r\nevent: ping\r\ndata: {}\r\n\r\nevent: delta\r\ndata: {"text":"餐饮🍜\\n记录"}\r\n\r\nevent: status\ndata: {"text":"继续"}\n\n'
+  for (const byte of Buffer.from(source)) parser.push(decoder.decode(Uint8Array.of(byte).buffer))
+  decoder.decode(new ArrayBuffer(0), true)
+  assert.deepEqual(events, [{ event: 'delta', data: { text: '餐饮🍜\n记录' } }, { event: 'status', data: { text: '继续' } }])
+  const broken = new StreamDecoder()
+  broken.decode(Uint8Array.of(0xe4).buffer)
+  assert.throws(() => broken.decode(new ArrayBuffer(0), true), /中断/)
+})
+
+await check('H5 使用 fetch 读取真实分片并在完成前展示正文', async () => {
+  const { chatStream } = await import(await moduleUrl(path.join(root, 'common/api/chat-stream.ts')))
+  const originalFetch = globalThis.fetch
+  let controller, readerCancelled = false
+  globalThis.window = {}
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(options.method, 'POST')
+    assert.equal(options.headers.Authorization, 'Bearer token')
+    return { ok: true, body: new ReadableStream({ start(value) { controller = value }, cancel() { readerCancelled = true } }) }
+  }
+  try {
+    const events = [], task = chatStream('/test', 'token', { text: '看看' }, event => events.push(event))
+    await tick()
+    controller.enqueue(Buffer.from('event: delta\ndata: {"text":"中文增量"}\n\n'))
+    await tick()
+    assert.equal(events[0].data.text, '中文增量')
+    controller.enqueue(Buffer.from('event: done\ndata: {"id":"done"}\n\n'))
+    controller.close()
+    assert.equal((await task.promise).id, 'done')
+    assert.equal(readerCancelled, false)
+  } finally { delete globalThis.window; globalThis.fetch = originalFetch }
 })
 
 console.log(`真实聊天前端检查完成：${passed} 项通过；只使用模拟服务，不发送模型请求。`)

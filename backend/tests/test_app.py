@@ -40,6 +40,7 @@ def test_app_starts_without_external_services():
             "/api/v1/assistant/conversations",
             "/api/v1/assistant/conversations/{conversation_id}",
             "/api/v1/assistant/conversations/{conversation_id}/messages",
+            "/api/v1/assistant/conversations/{conversation_id}/messages/stream",
             "/api/v1/books/{book_id}",
             "/api/v1/books/{book_id}/members",
             "/api/v1/books/{book_id}/invitations",

@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-6-luna"
     llm_api_mode: Literal["responses", "chat_completions"] = "responses"
     llm_timeout_seconds: float = Field(default=45, ge=1, le=90)
+    chat_timeout_seconds: float = Field(default=240, ge=10, le=240)
     book_invite_secret: SecretStr | None = Field(default=None, min_length=32)
 
     @field_validator("llm_base_url")

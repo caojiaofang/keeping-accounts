@@ -13,6 +13,9 @@ export const useChatStore = defineStore('chat', () => {
   const sending = ref(false)
   const error = ref('')
   const pending = ref<{ id: string; text: string }>()
+  const preview = ref<Pick<ChatTurn, 'answer' | 'result'>>()
+  const progress = ref('')
+  let cancelStream: (() => void) | undefined
   const hasMore = ref(false)
   const initialMonth = ref('')
   const bookId = ref('')
@@ -25,6 +28,10 @@ export const useChatStore = defineStore('chat', () => {
 
   function clear(): void {
     generation++
+    cancelStream?.()
+    cancelStream = undefined
+    preview.value = undefined
+    progress.value = ''
     turns.value = []
     history.value = []
     conversationId.value = ''
@@ -67,6 +74,7 @@ export const useChatStore = defineStore('chat', () => {
       conversationId.value = id
       hasMore.value = result.hasMore
       pending.value = undefined
+      preview.value = undefined
       return true
     } catch (cause) { if (current(version)) report(cause); return false }
     finally { if (current(version)) loading.value = false }
@@ -92,6 +100,8 @@ export const useChatStore = defineStore('chat', () => {
     conversationId.value = ''
     turns.value = []
     pending.value = undefined
+    preview.value = undefined
+    progress.value = ''
     hasMore.value = false
     error.value = ''
   }
@@ -117,20 +127,33 @@ export const useChatStore = defineStore('chat', () => {
     const version = generation
     sending.value = true
     error.value = ''
+    preview.value = undefined
+    progress.value = '正在连接分析服务…'
     pending.value ||= { id: newId(), text: question }
     conversationId.value ||= newId()
     try {
       await ledger.chatRequest<ConversationSummary>('/conversations', { method: 'POST', data: { id: conversationId.value, bookId: bookId.value, month: initialMonth.value } })
       if (!current(version)) return false
-      const result = await ledger.chatRequest<ChatTurn>(`/conversations/${conversationId.value}/messages`, { method: 'POST', data: { ...pending.value } })
+      const task = ledger.streamChat(`/conversations/${conversationId.value}/messages/stream`, { ...pending.value }, event => {
+        if (!current(version)) return
+        if (event.event === 'status') progress.value = event.data.text
+        if (event.event === 'snapshot') preview.value = event.data
+        if (event.event === 'delta') {
+          preview.value ||= { answer: '' }
+          preview.value.answer += event.data.text
+        }
+      })
+      cancelStream = task.cancel
+      const result = await task.promise
       if (!current(version)) return false
       turns.value = [...turns.value.filter(turn => turn.id !== result.id), result].sort((a, b) => a.sequence - b.sequence)
       pending.value = undefined
+      preview.value = undefined
       await refreshHistory()
       return true
     } catch (cause) { if (current(version)) report(cause); return false }
-    finally { if (current(version)) sending.value = false }
+    finally { if (current(version)) { sending.value = false; progress.value = ''; cancelStream = undefined } }
   }
 
-  return { turns, history, conversationId, initialMonth, bookId, ownerId, context, loading, sending, busy, error, pending, hasMore, clear, load, read, refreshHistory, loadEarlier, send, startNew }
+  return { turns, history, conversationId, initialMonth, bookId, ownerId, context, loading, sending, busy, error, pending, preview, progress, hasMore, clear, load, read, refreshHistory, loadEarlier, send, startNew }
 })

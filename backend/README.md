@@ -2,7 +2,7 @@
 
 基于 **Python 3.12 + FastAPI + SQLAlchemy 2 + PostgreSQL + Redis** 的后端基础框架，使用 Alembic 管理数据库迁移，在 Windows + PyCharm 中开发。
 
-当前已实现微信登录、个人及共享账本、账单新增/编辑/删除、预算、邀请与成员管理、退出/转让/解散及操作记录。开发库与正式库均为 `0004_shared`，正式环境已独立配置 `BOOK_INVITE_SECRET`，详见[共享账本说明](docs/shared-books.md)。sub2api 使用 `gpt-6-luna`，推理强度固定为 `xhigh`；真实聊天分析及历史会话已接入，并遵循当前成员权限，详见[聊天消费分析](docs/chat-analysis.md)。自定义分类及独立统计 API 待开发。正式环境版本为 `20261024T121036Z`，详情见[上线记录](docs/releases/20261024T121036Z.md)。
+当前已实现微信登录、个人及共享账本、账单新增/编辑/删除、预算、邀请与成员管理、退出/转让/解散及操作记录。开发库与正式库均为 `0004_shared`，正式环境已独立配置 `BOOK_INVITE_SECRET`，详见[共享账本说明](docs/shared-books.md)。sub2api 使用 `gpt-6-luna`，推理强度固定为 `xhigh`；真实聊天分析、流式回答及历史会话已接入，并遵循当前成员权限，详见[聊天消费分析](docs/chat-analysis.md)。自定义分类及独立统计 API 待开发。正式环境版本为 `20261025T043611Z`，详情见[上线记录](docs/releases/20261025T043611Z.md)。
 
 正式服务使用 Docker Compose 部署到 z11，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
 
@@ -86,6 +86,7 @@ backend/
 | `LLM_BASE_URL` / `LLM_API_KEY` | sub2api HTTPS 地址及后端专用密钥 |
 | `LLM_MODEL` / `LLM_API_MODE` | 默认 `gpt-6-luna` / `responses`；推理强度固定为 `xhigh` |
 | `LLM_TIMEOUT_SECONDS` | 单次模型请求超时，默认 45 秒 |
+| `CHAT_TIMEOUT_SECONDS` | 流式聊天整轮模型与统计预算，默认 240 秒，范围 10–240 秒；解释超时保留统计 |
 
 未配置连接且保持 `CHECK_CONNECTIONS_ON_STARTUP=false` 时仍可独立启动。设为 `true` 后必须同时配置两项连接，启动时执行 PostgreSQL 只读查询和 Redis PING，检查失败则退出；不会自动建表或迁移。健康检查仅表示应用运行，不持续探测外部服务。服务退出时释放连接资源。
 

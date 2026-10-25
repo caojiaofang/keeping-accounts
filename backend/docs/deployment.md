@@ -1,6 +1,6 @@
 # z11 正式部署
 
-当前正式版本：`20261024T121036Z`，2026-10-24 20:13:56（北京时间）完成验证，数据库为 `0004_shared`。镜像、备份和检查结果见[上线记录](releases/20261024T121036Z.md)。
+当前正式版本：`20261025T043611Z`，2026-10-25 12:41:32（北京时间）完成验证，数据库为 `0004_shared`。镜像、备份和检查结果见[上线记录](releases/20261025T043611Z.md)。
 
 后端通过 Docker Compose 运行，公网地址为 `https://mjzs.zf-yun.cn`。根路径跳转到 `/docs`；健康检查为 `/api/v1/health`，接口前缀为 `/api/v1`。
 
@@ -50,7 +50,7 @@ curl --fail https://mjzs.zf-yun.cn/api/v1/health
 
 ## 更新后端
 
-共享账本版本需要执行至 `0004_shared` 迁移，并在服务器环境文件配置独立随机的 `BOOK_INVITE_SECRET`（至少 32 字符，不复用开发密钥）。模型配置保持 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL=gpt-6-luna`、`LLM_API_MODE=responses` 和 `LLM_TIMEOUT_SECONDS=45`；推理强度在代码中固定为 `xhigh`。使用本仓库的 Nginx 配置（读取超时 120 秒），有改动时检查后重载。密钥不放入部署包；迁移前先备份正式库和配置，保留旧镜像与版本目录。
+共享账本版本需要执行至 `0004_shared` 迁移，并在服务器环境文件配置独立随机的 `BOOK_INVITE_SECRET`（至少 32 字符，不复用开发密钥）。模型配置保持 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL=gpt-6-luna`、`LLM_API_MODE=responses` 和 `LLM_TIMEOUT_SECONDS=45`；推理强度在代码中固定为 `xhigh`。流式聊天单独配置 `CHAT_TIMEOUT_SECONDS=240`，Nginx 读取超时仍为 120 秒，通过每十秒心跳维持连接，并使用 `proxy_buffering off` 立即转发增量。使用本仓库的 Nginx 配置，有改动时检查后重载。密钥不放入部署包；迁移前先备份正式库和配置，保留旧镜像与版本目录。
 
 先在本机执行现有 pytest、Ruff 检查。每次更新创建新版本目录并保留旧镜像，避免覆盖正在运行的源码。以下在仓库根目录的 PowerShell 执行，仅打包部署所需文件：
 

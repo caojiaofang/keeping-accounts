@@ -28,3 +28,10 @@ export interface Conversation extends ConversationSummary {
   turns: ChatTurn[]
   hasMore: boolean
 }
+
+export type ChatStreamEvent =
+  | { event: 'status'; data: { text: string } }
+  | { event: 'snapshot'; data: { answer: string; result?: AnalysisResult } }
+  | { event: 'delta'; data: { text: string } }
+  | { event: 'done'; data: ChatTurn }
+  | { event: 'error'; data: { status: number; detail: string } }

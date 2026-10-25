@@ -1,7 +1,9 @@
+import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 
 from app.api.deps import get_redis, get_settings
@@ -87,3 +89,24 @@ async def read_conversation(
 )
 async def send_message(conversation_id: UUID, body: SendMessage, service: Chat):
     return await service.send(conversation_id, body)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/stream",
+    summary="流式分析账单，逐步返回统计和解释，完成后保存整轮问答",
+)
+async def stream_message(conversation_id: UUID, body: SendMessage, service: Chat):
+    # 首包之前校验访问权限；之后的失败通过流内 error 事件返回。
+    await service.require_conversation(conversation_id)
+    await service.ledger.session.rollback()
+
+    async def encode():
+        async for event in service.events(conversation_id, body):
+            data = json.dumps(event["data"], ensure_ascii=True, separators=(",", ":"))
+            yield f"event: {event['event']}\ndata: {data}\n\n"
+
+    return StreamingResponse(
+        encode(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
