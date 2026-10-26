@@ -1,28 +1,10 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { createPinia, setActivePinia } from 'pinia'
-import ts from 'typescript'
+import { moduleUrl, root } from './test-modules.mjs'
 
-const url = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const compile = async path => ts.transpileModule(await readFile(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
-const formatUrl = url(await compile('../common/utils/format.ts'))
-const sharedUrl = url((await compile('../common/services/shared-books.ts')).replace("'../utils/format'", `'${formatUrl}'`))
-const categoriesUrl = url(await compile('../common/data/categories.ts'))
-const mockUrl = url((await compile('../common/mock/ledger.ts')).replace("'@/common/utils/format'", `'${formatUrl}'`))
-const configUrl = url(await compile('../common/config.ts'))
-const requestUrl = url((await compile('../common/api/request.ts')).replace("'@/common/config'", `'${configUrl}'`))
-const idUrl = url(await compile('../common/utils/id.ts'))
-const storeSource = (await compile('../store/ledger.ts'))
-  .replace("'vue'", `'${import.meta.resolve('vue')}'`)
-  .replace("'pinia'", `'${import.meta.resolve('pinia')}'`)
-  .replace("'@/common/utils/format'", `'${formatUrl}'`)
-  .replace("'@/common/data/categories'", `'${categoriesUrl}'`)
-  .replace("'@/common/mock/ledger'", `'${mockUrl}'`)
-  .replace("'@/common/services/shared-books'", `'${sharedUrl}'`)
-  .replace("'@/common/api/request'", `'${requestUrl}'`)
-  .replace("'@/common/utils/id'", `'${idUrl}'`)
-const { useLedgerStore } = await import(url(storeSource))
-const { activeMembers, canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, entryAuthor, familyExample, memberTotals, validInvitation } = await import(sharedUrl)
+const { useLedgerStore } = await import(await moduleUrl(path.join(root, 'store/ledger.ts')))
+const { activeMembers, canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, entryAuthor, familyExample, memberTotals, validInvitation } = await import(await moduleUrl(path.join(root, 'common/services/shared-books.ts')))
 const storage = new Map()
 globalThis.uni = { getStorageSync: key => storage.has(key) ? JSON.parse(JSON.stringify(storage.get(key))) : undefined, setStorageSync: (key, value) => storage.set(key, JSON.parse(JSON.stringify(value))), showToast: () => {} }
 let passed = 0

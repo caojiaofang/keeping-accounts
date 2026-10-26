@@ -138,6 +138,8 @@ CHECK_CONNECTIONS_ON_STARTUP=true
 
 ## 开发检查
 
+前后端统一入口：在仓库根目录执行 `.\scripts\check.ps1`，可一并完成前端检查及以下后端检查；追加 `-Build` 会验证微信小程序与 H5 构建。任一检查失败立即停止并返回非零退出码。统一入口临时关闭真实集成及模型测试开关，结束后恢复原值；前置依赖说明见[项目说明](../README.md#开发与检查)。
+
 从 `backend` 目录运行：
 
 ```powershell

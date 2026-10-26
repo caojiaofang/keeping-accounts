@@ -4,6 +4,7 @@
   "private": true,
   "description": "墨记微信记账小程序",
   "scripts": {
+    "check": "npm run type-check && npm run check:auth && npm run check:chat && npm run check:assistant && npm run check:calendar && npm run check:shared-books && npm run check:shared-cloud",
     "dev:mp-weixin": "node scripts/uni.mjs dev mp-weixin",
     "build:mp-weixin": "node scripts/uni.mjs build mp-weixin",
     "dev:h5": "node scripts/uni.mjs dev h5",
