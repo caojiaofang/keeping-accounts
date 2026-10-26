@@ -2,9 +2,11 @@
 
 基于 **Python 3.12 + FastAPI + SQLAlchemy 2 + PostgreSQL + Redis** 的后端基础框架，使用 Alembic 管理数据库迁移，在 Windows + PyCharm 中开发。
 
-当前已实现微信登录、个人及共享账本、账单新增/编辑/删除、预算、邀请与成员管理、退出/转让/解散及操作记录。开发库与正式库均为 `0004_shared`，正式环境已独立配置 `BOOK_INVITE_SECRET`，详见[共享账本说明](docs/shared-books.md)。sub2api 使用 `gpt-6-luna`，推理强度固定为 `xhigh`；真实聊天分析、流式回答及历史会话已接入，并遵循当前成员权限，详见[聊天消费分析](docs/chat-analysis.md)。自定义分类及独立统计 API 待开发。正式环境版本为 `20261025T043611Z`，详情见[上线记录](docs/releases/20261025T043611Z.md)。
+当前已实现微信登录、个人及共享账本、账单新增/编辑/删除、预算、邀请与成员管理、退出/转让/解散及操作记录。开发库与正式库均为 `0004_shared`，正式环境已独立配置 `BOOK_INVITE_SECRET`，详见[共享账本说明](docs/shared-books.md)。sub2api 使用 `gpt-6-luna`，推理强度固定为 `xhigh`；真实聊天分析、流式回答及历史会话已接入，并遵循当前成员权限，详见[聊天消费分析](docs/chat-analysis.md)。自定义分类及独立统计 API 待开发。正式环境版本为 `20261026T050441Z`，详情见[上线记录](docs/releases/20261026T050441Z.md)。
 
 正式服务使用 Docker Compose 部署到 z11，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
+
+Web 管理端第一版提供独立管理员登录、平台概览、用户与账本只读查询，管理 API 前缀为 `/prod-api`。Vue 3 + Element Plus 前端位于仓库 `admin/`，与后端分别构建和部署，不影响小程序 `/api/v1`。管理员初始化、接口与双服务发布见 [Web 管理端说明](docs/web-admin.md)。
 
 ## 在 PyCharm 中启动
 

@@ -52,6 +52,14 @@ def test_app_starts_without_external_services():
             "/api/v1/books/{book_id}/activities",
             "/api/v1/book-invitations/preview",
             "/api/v1/book-invitations/accept",
+            "/prod-api/auth/login",
+            "/prod-api/auth/me",
+            "/prod-api/auth/logout",
+            "/prod-api/overview",
+            "/prod-api/users",
+            "/prod-api/users/{user_id}",
+            "/prod-api/books",
+            "/prod-api/books/{book_id}",
         }
         assert app.state.session_factory is None
         assert app.state.redis is None

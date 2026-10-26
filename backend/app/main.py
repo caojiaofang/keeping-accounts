@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.admin import router as admin_router
 from app.api.v1.router import api_router
 from app.core.config import Settings
 from app.core.errors import ServiceError
@@ -28,6 +29,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    @app.middleware("http")
+    async def admin_private_responses(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/prod-api" or request.url.path.startswith("/prod-api/"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
     @app.exception_handler(ServiceError)
     async def handle_service_error(request: Request, error: ServiceError) -> JSONResponse:
         return JSONResponse(
@@ -38,6 +47,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, error: RequestValidationError):
+        if request.url.path.startswith("/prod-api/"):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "请求参数不正确，请检查输入和筛选条件"},
+                headers={"Cache-Control": "no-store"},
+            )
         if request.url.path.startswith("/api/v1/auth/"):
             # 验证错误不能原样回显请求体，避免一次性 code 或误传的密钥进入响应。
             return JSONResponse(
@@ -62,4 +77,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["Authorization", "Content-Type"],
         )
     app.include_router(api_router)
+    app.include_router(admin_router)
     return app

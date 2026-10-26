@@ -43,6 +43,29 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=45, ge=1, le=90)
     chat_timeout_seconds: float = Field(default=240, ge=10, le=240)
     book_invite_secret: SecretStr | None = Field(default=None, min_length=32)
+    admin_username: str = Field(default="admin", min_length=3, max_length=64)
+    admin_password_hash: SecretStr | None = None
+    admin_origin: str = "http://127.0.0.1:5174"
+    admin_session_ttl_seconds: int = Field(default=28800, ge=300, le=86400)
+    admin_login_rate_limit: int = Field(default=5, ge=1, le=30)
+
+    @field_validator("admin_origin")
+    @classmethod
+    def validate_admin_origin(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("ADMIN_ORIGIN 必须为完整的 Web 管理端来源地址")
+        return value.rstrip("/")
 
     @field_validator("llm_base_url")
     @classmethod
@@ -77,6 +100,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_environment_targets(self) -> "Settings":
+        if self.app_env == "production" and self.admin_password_hash:
+            if not self.admin_origin.startswith("https://"):
+                raise ValueError("正式管理端 ADMIN_ORIGIN 必须使用 HTTPS")
         development = self.app_env in {"development", "test"}
         expected_database = "keeping_accounts_dev" if development else "keeping_accounts_prod"
         expected_prefix = "moji:dev:" if development else "moji:prod:"
