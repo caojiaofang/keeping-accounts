@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, User, Notebook, SwitchButton, Menu, Close, Lock } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Notebook, SwitchButton, Menu, Close, Lock, Setting, Clock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import { api, auth } from '../api'
 import { errorMessage } from '../format'
 
 const route = useRoute(), router = useRouter(), menuOpen = ref(false), busy = ref(false)
-const navigation = [{ path: '/', name: '数据概览', icon: DataAnalysis }, { path: '/users', name: '用户查询', icon: User }, { path: '/books', name: '账本查询', icon: Notebook }]
+const navigation = [{ path: '/', name: '数据概览', icon: DataAnalysis }, { path: '/users', name: '用户查询', icon: User }, { path: '/books', name: '账本查询', icon: Notebook }, { path: '/account', name: '账号设置', icon: Setting }, { path: '/login-logs', name: '登录日志', icon: Clock }]
 async function logout() {
   busy.value = true
   try { await api('/auth/logout', { method: 'POST' }); auth.user = null; auth.checked = true; await router.replace('/login') }

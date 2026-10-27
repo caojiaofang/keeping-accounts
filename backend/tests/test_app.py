@@ -60,6 +60,10 @@ def test_app_starts_without_external_services():
             "/prod-api/users/{user_id}",
             "/prod-api/books",
             "/prod-api/books/{book_id}",
+            "/prod-api/account",
+            "/prod-api/account/password",
+            "/prod-api/account/logout-all",
+            "/prod-api/account/logs",
         }
         assert app.state.session_factory is None
         assert app.state.redis is None

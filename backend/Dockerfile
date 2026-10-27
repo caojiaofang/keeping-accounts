@@ -12,7 +12,7 @@ RUN pip install --disable-pip-version-check -r requirements.txt \
 
 COPY --chown=moji:moji app ./app
 COPY --chown=moji:moji alembic ./alembic
-COPY --chown=moji:moji alembic.ini check_connections.py admin_password.py ./
+COPY --chown=moji:moji alembic.ini check_connections.py admin_password.py admin_account.py ./
 USER moji
 
 EXPOSE 8000

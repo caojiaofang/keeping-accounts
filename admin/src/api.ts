@@ -8,6 +8,7 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const userAtStart = auth.user
   let response: Response
   try {
     response = await fetch(`/prod-api${path}`, {
@@ -21,7 +22,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
-    if (response.status === 401 && path !== '/auth/login') {
+    if (response.status === 401 && path !== '/auth/login' && auth.user === userAtStart) {
       auth.user = null
       window.dispatchEvent(new Event('moji-session-expired'))
     }

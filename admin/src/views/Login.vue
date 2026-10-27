@@ -31,6 +31,8 @@ async function login() {
     <main class="login-form-wrap"><div class="login-form">
       <span class="login-mark">墨</span><h2>欢迎回来</h2><p class="muted">登录管理后台，查看墨记的最新动态。</p>
       <el-alert v-if="route.query.reason === 'expired'" title="登录已过期，请重新登录" type="warning" :closable="false" show-icon />
+      <el-alert v-else-if="route.query.reason === 'password_changed'" title="密码已修改，请使用新密码重新登录" type="success" :closable="false" show-icon />
+      <el-alert v-else-if="route.query.reason === 'sessions_revoked'" title="全部会话已退出，请重新登录" type="success" :closable="false" show-icon />
       <el-alert v-else-if="route.query.reason === 'connection'" title="暂时无法连接服务，请检查网络后重新登录" type="warning" :closable="false" show-icon />
       <form @submit.prevent="login">
         <label for="username">管理员账号</label><el-input id="username" v-model="username" :prefix-icon="User" size="large" placeholder="请输入管理员账号" autocomplete="username" maxlength="64" :disabled="busy" />

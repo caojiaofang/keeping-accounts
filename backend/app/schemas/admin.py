@@ -17,6 +17,39 @@ class AdminIdentity(BaseModel):
     username: str
 
 
+class AdminAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    username: str
+    created_at: datetime
+    last_login_at: datetime | None
+    password_changed_at: datetime | None
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: SecretStr = Field(min_length=1, max_length=256)
+    new_password: SecretStr = Field(min_length=12, max_length=256)
+
+
+AuditAction = Literal[
+    "login", "logout", "password_change", "logout_all", "password_reset", "bootstrap"
+]
+AuditOutcome = Literal["success", "failure"]
+
+
+class AdminAuditResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    username: str
+    action: AuditAction
+    outcome: AuditOutcome
+    reason: str
+    ip: str
+    user_agent: str
+    created_at: datetime
+
+
 class Page[T](BaseModel):
     items: list[T]
     total: int

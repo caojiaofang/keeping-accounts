@@ -11,6 +11,8 @@ export const router = createRouter({
         { path: '', name: 'overview', component: () => import('./views/Overview.vue'), meta: { title: '数据概览' } },
         { path: 'users', name: 'users', component: () => import('./views/Users.vue'), meta: { title: '用户查询' } },
         { path: 'books', name: 'books', component: () => import('./views/Books.vue'), meta: { title: '账本查询' } },
+        { path: 'account', name: 'account', component: () => import('./views/Account.vue'), meta: { title: '账号设置' } },
+        { path: 'login-logs', name: 'login-logs', component: () => import('./views/LoginLogs.vue'), meta: { title: '登录日志' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

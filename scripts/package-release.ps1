@@ -18,7 +18,7 @@ try {
     # 只收集清单中的源码和静态产物，排除实际环境文件、账号文件及本地依赖。
     tar --exclude=__pycache__ --exclude=*.pyc -czf $archive `
         docker-compose.yml backend/app backend/alembic backend/alembic.ini `
-        backend/check_connections.py backend/admin_password.py backend/requirements.txt `
+        backend/check_connections.py backend/admin_password.py backend/admin_account.py backend/requirements.txt `
         backend/Dockerfile backend/.dockerignore backend/docker-compose.yml backend/deploy `
         admin/Dockerfile admin/.dockerignore admin/deploy admin/dist
     if ($LASTEXITCODE -ne 0) { throw '部署包生成失败。' }
