@@ -150,7 +150,7 @@ function login() { uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2
     <view class="record-composer">
       <view v-if="attachment" class="attachment-preview"><image :src="attachment.path" mode="aspectFill" @tap="previewImage(attachment.path)" /><view><text>已选一张账单图片</text><text>可以补充说明，再一起发送</text></view><button aria-label="移除图片" :disabled="busy" @tap="attachment = undefined"><AppIcon name="close" :size="28" /></button></view>
       <text v-if="inputError" class="input-error">{{ inputError }}</text>
-      <view class="compose-box"><button class="image-button" aria-label="拍照或从相册选择账单" :disabled="blocked" :loading="choosing" @tap="chooseImage"><AppIcon v-if="!choosing" name="image" :size="37" /></button><textarea v-model="input" class="record-input" :placeholder="record.pending.length ? '继续补充，例如：是昨天的' : '说一笔收支，或发张账单图片'" :maxlength="200" auto-height :disabled="busy" :adjust-position="true" :cursor-spacing="24" /><button class="send-button" aria-label="发送记账消息" :disabled="blocked || (!input.trim() && !attachment)" @tap="send"><AppIcon name="arrow" :size="30" light /></button></view>
+      <view class="compose-box"><button class="image-button" aria-label="拍照或从相册选择账单" :disabled="blocked" :loading="choosing" @tap="chooseImage"><AppIcon v-if="!choosing" name="image" :size="37" /></button><view class="record-input-wrap"><textarea v-model="input" class="record-input" :placeholder="record.pending.length ? '继续补充，例如：是昨天的' : '说一笔收支，或发张账单图片'" :maxlength="200" auto-height :disable-default-padding="true" :disabled="busy" :adjust-position="true" :cursor-spacing="24" /></view><button class="send-button" aria-label="发送记账消息" :disabled="blocked || (!input.trim() && !attachment)" @tap="send"><AppIcon name="arrow" :size="30" light /></button></view>
       <text class="composer-note">{{ store.accountId ? '文字、图片及必要上下文将发给模型 · 核对后确认记账' : '预置示例演示 · 登录后支持文字聊天和图片识别' }}</text>
     </view>
     <view v-if="editingKey && form" class="sheet-mask" @tap="editingKey = ''"><view class="sheet edit-sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">修改账单草稿</text><button class="icon-button" aria-label="关闭修改草稿" @tap="editingKey = ''"><AppIcon name="close" :size="32" /></button></view><scroll-view scroll-y class="edit-fields">
@@ -220,7 +220,9 @@ function login() { uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2
 .image-button { background: #eef4ef; }
 .send-button { background: #285e4e; }
 .send-button[disabled] { background: #bdcfc2; }
-.record-input { flex: 1; min-width: 0; min-height: 55rpx; max-height: 155rpx; font-size: 25rpx; line-height: 1.65; padding: 8rpx 0; }
+/* 留白放在外层，避免原生 textarea 的内边距影响自动高度和文字位置。 */
+.record-input-wrap { flex: 1; min-width: 0; min-height: 62rpx; padding: 11rpx 0; display: flex; align-items: center; }
+.record-input { display: block; width: 100%; min-width: 0; min-height: 40rpx; max-height: 160rpx; font-size: 25rpx; line-height: 40rpx; padding: 0; }
 .composer-note { display: block; text-align: center; font-size: 18rpx; color: #829589; margin-top: 12rpx; }
 .attachment-preview { display: flex; align-items: center; gap: 18rpx; margin-bottom: 17rpx; padding: 14rpx; border-radius: 18rpx; background: #e8f0e9; }
 .attachment-preview image { width: 80rpx; height: 80rpx; border-radius: 10rpx; }

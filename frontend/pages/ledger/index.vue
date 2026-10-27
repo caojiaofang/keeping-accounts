@@ -127,8 +127,9 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
 .assistant-entry-copy { display: block; color: #8a9f8e; font-size: 18rpx; margin-top: 5rpx; }
 .assistant-entry-divider { width: 1rpx; height: 54rpx; background: #dce6dc; }
 .entry-count { font-size: 21rpx; color: #8e9c93; margin-left: 16rpx; }
-.tools { display: flex; gap: 20rpx; }
-.calendar-shortcut { display: flex; align-items: center; gap: 6rpx; font-size: 23rpx; color: #69866f; }
+.tools { display: flex; align-items: center; gap: 20rpx; }
+.calendar-shortcut { display: flex; align-items: center; justify-content: center; height: 43rpx; gap: 6rpx; font-size: 23rpx; color: #69866f; }
+.calendar-shortcut > text { display: block; line-height: 30rpx; }
 .tool-button { position: relative; width: 43rpx; height: 43rpx; display: flex; align-items: center; justify-content: center; }
 .filter-dot { position: absolute; width: 10rpx; height: 10rpx; background: #b77e47; right: 0; top: 0; border-radius: 50%; }
 .filter-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; }

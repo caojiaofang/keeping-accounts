@@ -136,7 +136,7 @@ async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpe
         <view id="conversation-end" class="conversation-end" />
       </view>
     </scroll-view>
-    <view class="chat-composer"><view class="compose-box"><textarea v-model="input" class="chat-input" :placeholder="store.accountId ? '问问这月的收支，也可以接着追问' : '问问这月的花费，或点选示例问题'" :disabled="blocked" :maxlength="200" auto-height :adjust-position="true" :cursor-spacing="24" confirm-type="send" @confirm="ask(input)" /><button class="send-message" :disabled="blocked || !input.trim()" aria-label="发送消息" @tap="ask(input)"><AppIcon name="arrow" :size="31" light /></button></view><text class="composer-note">基于已记录的账单分析，实际收支以你的核对为准</text></view>
+    <view class="chat-composer"><view class="compose-box"><view class="chat-input-wrap"><textarea v-model="input" class="chat-input" :placeholder="store.accountId ? '问问这月的收支，也可以接着追问' : '问问这月的花费，或点选示例问题'" :disabled="blocked" :maxlength="200" auto-height :disable-default-padding="true" :adjust-position="true" :cursor-spacing="24" confirm-type="send" @confirm="ask(input)" /></view><button class="send-message" :disabled="blocked || !input.trim()" aria-label="发送消息" @tap="ask(input)"><AppIcon name="arrow" :size="31" light /></button></view><text class="composer-note">基于已记录的账单分析，实际收支以你的核对为准</text></view>
     <view v-if="historyOpen" class="sheet-mask" @tap="historyOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">最近的分析对话</text><button class="icon-button" aria-label="关闭历史对话" @tap="historyOpen = false"><AppIcon name="close" :size="30" /></button></view><scroll-view scroll-y class="history-list"><button v-for="item in chat.history" :key="item.id" class="history-item" :disabled="busy" @tap="chooseHistory(item.id)"><text>{{ item.title }}</text><text>{{ monthLabel(item.month) }}</text></button><text v-if="!chat.history.length" class="chat-status">当前账本和月份还没有已保存的对话</text></scroll-view><text class="welcome-note">展示当前账本及入口月份最近二十个对话</text></view></view>
   </view>
 </template>
@@ -197,7 +197,9 @@ async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpe
 .conversation-end { height: 35rpx; }
 .chat-composer { flex-shrink: 0; padding: 18rpx 30rpx calc(13rpx + env(safe-area-inset-bottom)); background: #f6f8f7; border-top: 1rpx solid #e5ece6; }
 .compose-box { padding: 15rpx 15rpx 15rpx 22rpx; display: flex; align-items: flex-end; gap: 10rpx; background: #fff; border: 1rpx solid #dfe8e1; border-radius: 24rpx; }
-.chat-input { flex: 1; min-width: 0; min-height: 57rpx; max-height: 160rpx; font-size: 25rpx; line-height: 1.6; padding: 8rpx 0; }
+/* 与记账输入框共用相同的单行高度和上下留白，原生输入区保持无内边距。 */
+.chat-input-wrap { flex: 1; min-width: 0; min-height: 62rpx; padding: 11rpx 0; display: flex; align-items: center; }
+.chat-input { display: block; width: 100%; min-width: 0; min-height: 40rpx; max-height: 160rpx; font-size: 25rpx; line-height: 40rpx; padding: 0; }
 .send-message { width: 62rpx; height: 62rpx; display: flex; align-items: center; justify-content: center; background: #285e4e; border-radius: 18rpx; flex-shrink: 0; }
 .send-message[disabled] { background: #bdcfc2; }
 .composer-note { display: block; font-size: 18rpx; text-align: center; margin-top: 12rpx; color: #9eaaa1; }
