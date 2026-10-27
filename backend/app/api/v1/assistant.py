@@ -2,14 +2,14 @@ import json
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 
 from app.api.deps import get_redis, get_settings
 from app.api.v1.ledger import Ledger
 from app.core.config import Settings
-from app.schemas.assistant import ParseRequest, ParseResponse
+from app.schemas.assistant import ParseRequest, ParseResponse, RecordRequest, RecordResponse
 from app.schemas.chat import (
     ConversationResponse,
     ConversationSummary,
@@ -37,6 +37,24 @@ async def parse(
     settings: Annotated[Settings, Depends(get_settings)],
 ):
     return await AssistantService(ledger, request.app.state.llm, redis, settings).parse(body)
+
+
+@router.post(
+    "/record",
+    response_model=RecordResponse,
+    response_model_exclude_none=True,
+    summary="文字与单张图片连续记账，只返回待确认草稿",
+)
+async def record(
+    body: RecordRequest,
+    request: Request,
+    response: Response,
+    ledger: Ledger,
+    redis: Annotated[Redis, Depends(get_redis)],
+    settings: Annotated[Settings, Depends(get_settings)],
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await AssistantService(ledger, request.app.state.llm, redis, settings).record(body)
 
 
 def get_chat_service(

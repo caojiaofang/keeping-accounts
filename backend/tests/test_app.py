@@ -37,6 +37,7 @@ def test_app_starts_without_external_services():
             "/api/v1/entries",
             "/api/v1/entries/{entry_id}",
             "/api/v1/assistant/parse",
+            "/api/v1/assistant/record",
             "/api/v1/assistant/conversations",
             "/api/v1/assistant/conversations/{conversation_id}",
             "/api/v1/assistant/conversations/{conversation_id}/messages",

@@ -128,6 +128,7 @@ await check('首次打开注册登录页，体验数据保留在原存储区', a
   assert.equal(safeLoginRedirect('https://invalid.example'), '/pages/ledger/index')
   assert.equal(safeLoginRedirect('/pages/profile/index'), '/pages/profile/index')
   assert.equal(safeLoginRedirect('%2Fpages%2Fprofile%2Findex'), '/pages/profile/index')
+  assert.equal(safeLoginRedirect('%2Fpages%2Fassistant%2Findex'), '/pages/assistant/index')
   assert.equal(safeLoginRedirect('%invalid'), '/pages/ledger/index')
 })
 
@@ -384,6 +385,41 @@ await check('智能识别只返回草稿，确认前不修改账单，并使用�
   assert.equal(result.drafts[0].amount, 800)
   assert.equal(ledger.entries.length, before)
   assert.equal(cloudStates.get(users[0].id).entries.length, 0)
+  handler = server
+})
+
+await check('连续记账接口携带当前身份、账本、文字、图片及待确认上下文，确认前不保存', async () => {
+  const { auth, ledger } = await fresh()
+  await auth.login()
+  const before = ledger.entries.length
+  const image = 'data:image/png;base64,dGVzdA=='
+  handler = async options => {
+    assert.ok(options.header.Authorization)
+    assert.equal(new URL(options.url).pathname, '/api/v1/assistant/record')
+    assert.equal(options.data.bookId, ledger.activeBookId)
+    assert.equal(options.data.text, '是昨天的')
+    assert.equal(options.data.history[0].text, '识别账单图片')
+    assert.equal(options.data.image, image)
+    assert.equal(options.data.ownerId, undefined)
+    return { statusCode: 200, data: { drafts: [], clarification: '请确认金额', reply: '请确认金额' } }
+  }
+  const result = await ledger.recordDrafts({ text: '是昨天的', image, history: [{ role: 'user', text: '识别账单图片' }], drafts: [] })
+  assert.equal(result.clarification, '请确认金额')
+  assert.equal(ledger.entries.length, before)
+  handler = server
+})
+
+await check('连续记账的响应迟于切换账本时拒绝展示', async () => {
+  const { auth, ledger } = await fresh()
+  await auth.login()
+  let release
+  handler = async () => new Promise(resolve => { release = () => resolve({ statusCode: 200, data: { drafts: [], reply: '旧结果' } }) })
+  const request = ledger.recordDrafts({ text: '早餐8元', history: [], drafts: [] })
+  const rejected = assert.rejects(request, /账本已变化/)
+  await tick()
+  ledger.selectBook('another-book')
+  release()
+  await rejected
   handler = server
 })
 

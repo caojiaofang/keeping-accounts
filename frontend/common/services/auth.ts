@@ -37,7 +37,7 @@ export function isAuthSession(value: unknown): value is AuthSession {
 }
 
 export function safeLoginRedirect(value?: string): string {
-  const allowed = ['/pages/ledger/index', '/pages/profile/index', '/pages/books/index', '/pages/statistics/index', '/pages/shared-books/index']
+  const allowed = ['/pages/ledger/index', '/pages/profile/index', '/pages/books/index', '/pages/statistics/index', '/pages/shared-books/index', '/pages/assistant/index']
   try {
     const target = value ? decodeURIComponent(value) : ''
     if (/^\/pages\/book-invite\/index\?token=s1_[0-9a-f]{32}_[0-9a-f]{64}$/.test(target)) return target

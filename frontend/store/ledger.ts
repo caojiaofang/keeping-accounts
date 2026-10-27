@@ -10,6 +10,7 @@ import { chatStream } from '@/common/api/chat-stream'
 import type { ChatStreamEvent } from '@/common/types/chat'
 import { newId } from '@/common/utils/id'
 import type { AssistantDraft } from '@/common/mock/assistant'
+import type { RecordInput, RecordResult } from '@/common/types/record'
 
 const STORAGE_KEY = 'moji-demo-v1'
 
@@ -170,6 +171,18 @@ export const useLedgerStore = defineStore('ledger', () => {
       method: 'POST', token: cloudToken, timeout: 100000, data: { text, bookId: activeBookId.value },
     })
     if (user !== accountId.value) throw new Error('账号已变化，请重新识别')
+    return result
+  }
+
+  async function recordDrafts(input: RecordInput): Promise<RecordResult> {
+    if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
+    const user = accountId.value
+    const book = activeBookId.value
+    const token = cloudToken
+    const result = await apiRequest<RecordResult>('/api/v1/assistant/record', {
+      method: 'POST', token, timeout: 100000, data: { ...input, bookId: book },
+    })
+    if (user !== accountId.value || book !== activeBookId.value || token !== cloudToken) throw new Error('账号或账本已变化，请重新发送')
     return result
   }
 
@@ -391,5 +404,5 @@ export const useLedgerStore = defineStore('ledger', () => {
     return categories.find(category => category.id === id) || categories[11]
   }
 
-  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, recognizeDrafts, chatRequest, streamChat, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
+  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, recognizeDrafts, recordDrafts, chatRequest, streamChat, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
 })

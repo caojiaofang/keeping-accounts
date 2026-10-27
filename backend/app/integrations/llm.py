@@ -13,8 +13,10 @@ class LlmClient:
         self.settings = settings
         self.client = client
 
-    async def structured(self, instructions: str, text: str, schema: dict) -> dict:
-        base, endpoint, payload = self.request_payload(instructions, text, schema)
+    async def structured(
+        self, instructions: str, text: str, schema: dict, *, image: str | None = None
+    ) -> dict:
+        base, endpoint, payload = self.request_payload(instructions, text, schema, image=image)
         settings = self.settings
         try:
             response = await self.client.post(
@@ -27,6 +29,8 @@ class LlmClient:
             raise ServiceError(504, "智能助手响应超时，请稍后重试") from None
         except httpx.HTTPError:
             raise ServiceError(502, "暂时连接不到智能记账服务，请稍后重试") from None
+        if image and response.status_code in {400, 415, 422}:
+            raise ServiceError(502, "图片识别服务未能处理这张图片，请换图或改用文字记账")
         self.check_status(response)
         try:
             body = response.json()
@@ -49,11 +53,25 @@ class LlmClient:
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             raise ServiceError(502, "智能助手返回结果不完整，请稍后重试") from None
 
-    def request_payload(self, instructions: str, text: str, schema: dict):
+    def request_payload(
+        self, instructions: str, text: str, schema: dict, *, image: str | None = None
+    ):
         settings = self.settings
         if not settings.llm_api_key:
             raise ServiceError(503, "尚未配置智能记账服务，请先使用手动记账")
         messages = [{"role": "system", "content": instructions}, {"role": "user", "content": text}]
+        if image:
+            if settings.llm_api_mode == "responses":
+                content = [
+                    {"type": "input_text", "text": text},
+                    {"type": "input_image", "image_url": image, "detail": "high"},
+                ]
+            else:
+                content = [
+                    {"type": "text", "text": text},
+                    {"type": "image_url", "image_url": {"url": image, "detail": "high"}},
+                ]
+            messages[-1] = {"role": "user", "content": content}
         definition = {"name": "moji_result", "strict": True, "schema": schema}
         base = settings.llm_base_url
         base = base if base.endswith("/v1") else base + "/v1"

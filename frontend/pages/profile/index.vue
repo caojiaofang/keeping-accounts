@@ -68,7 +68,7 @@ function menuAction(key: string) {
   else if (key === 'categories') categoriesOpen.value = true
   else if (key === 'export') exportEntries()
   else if (key === 'help') uni.showModal({ title: '开始使用墨记', content: '点击底部“记一笔”录入收支；点击明细中的账单可以编辑或删除。顶部可切换月份和账本，统计页会同步展示对应数据。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
-  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。登录后的个人账本、账单、预算及分析对话保存在云端；体验数据与升级前的本机记录不会自动上传。智能识别会发送输入文本，聊天分析会按需发送本轮统计或必要明细给模型服务；记账需确认，分析不修改账单。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
+  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。登录后的账本、账单、预算及分析对话保存在云端；体验数据与升级前的本机记录不会自动上传。智能记账会发送本轮文字、主动选择的图片、最近对话及待确认草稿给模型服务；图片会移除元数据，不在墨记服务端保存。记账对话只在当前页面保留，切换账号、账本或离开页面会清空，点击卡片确认后才保存账单。消费分析会按需发送统计或必要明细给模型服务。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
   else if (key === 'about') uni.showModal({ title: '墨记', content: '把日子，一笔一笔记好。\n\n版本 0.1.0\n一款简单、安静的日常记账工具。', showCancel: false, confirmText: '继续记录', confirmColor: '#285e4e' })
 }
 function reset() {
