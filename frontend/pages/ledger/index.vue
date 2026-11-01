@@ -10,12 +10,14 @@ import BookSwitcher from '@/components/BookSwitcher.vue'
 import EntryList from '@/components/EntryList.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
+import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
 import { money, toast } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
 import { activeMembers, canManageBook } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
+const auth = useAuthStore()
 store.hydrate()
 onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
 onShow(() => { void store.refreshCloud() })
@@ -59,6 +61,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
   <view class="page">
     <TopBar title="墨记" subtitle="把日子，一笔一笔记好。" brand />
     <CloudStatus />
+    <view v-if="auth.ready && !auth.user" class="guest-notice"><AppIcon name="info" :size="26" /><text>{{ auth.error || '当前为本地体验，可直接记账、查看统计。体验记录仅保存在本机，不会自动转入登录账号。' }}</text></view>
     <view class="context-row"><MonthPicker v-model="store.selectedMonth" /><BookSwitcher /></view>
     <button v-if="store.activeBook.kind === 'shared'" class="shared-ledger-link" @tap="openSharedBook"><AppIcon name="home" :size="26" /><text>多人账本 · {{ activeMembers(store.activeBook).length }} 人一起记</text><text>成员与邀请</text><AppIcon name="chevron" :size="22" /></button>
 
@@ -94,6 +97,8 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
 </template>
 
 <style scoped lang="scss">
+.guest-notice { display: flex; align-items: center; gap: 12rpx; margin: 6rpx 0 22rpx; padding: 18rpx 22rpx; border-radius: 16rpx; background: #eef3ee; color: #6f8978; font-size: 22rpx; line-height: 1.6; }
+.guest-notice > text { flex: 1; }
 .context-row { display: flex; justify-content: space-between; align-items: center; margin: 2rpx 0 24rpx; }
 .shared-ledger-link { display: flex; align-items: center; gap: 9rpx; padding: 0 4rpx 22rpx; font-size: 21rpx; color: #789681; width: 100%; text-align: left; }
 .shared-ledger-link > text:first-of-type { flex: 1; }

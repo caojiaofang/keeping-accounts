@@ -108,7 +108,7 @@ async function fresh(clear = true) {
   storageFailure = false
   identity = users[0]
   handler = server
-  route = 'pages/login/index'
+  route = 'pages/ledger/index'
   setActivePinia(createPinia())
   const auth = useAuthStore()
   const ledger = useLedgerStore()
@@ -118,11 +118,20 @@ async function fresh(clear = true) {
 let passed = 0
 async function check(name, action) { await action(); passed++; console.log(`通过：${name}`) }
 
-await check('首次打开注册登录页，体验数据保留在原存储区', async () => {
+await check('首次直接进入首页，无需微信登录或请求后端即可浏览体验', async () => {
   const pages = JSON.parse(await readFile(path.join(root, 'pages.json'), 'utf8'))
-  assert.equal(pages.pages[0].path, 'pages/login/index')
+  assert.equal(pages.pages[0].path, 'pages/ledger/index')
   const { auth, ledger } = await fresh()
+  let requests = 0
+  handler = async () => { requests++; throw new Error('首次体验不应请求后端') }
+  await auth.bootstrap()
+  await auth.verifyIfNeeded()
+  await ledger.refreshCloud()
   assert.equal(auth.user, null)
+  assert.equal(auth.ready, true)
+  assert.equal(loginCount, 0)
+  assert.equal(requests, 0)
+  assert.equal(route, 'pages/ledger/index')
   assert.ok(ledger.entries.length)
   assert.ok(storage.has('moji-demo-v1'))
   assert.equal(safeLoginRedirect('https://invalid.example'), '/pages/ledger/index')
@@ -130,6 +139,24 @@ await check('首次打开注册登录页，体验数据保留在原存储区', a
   assert.equal(safeLoginRedirect('%2Fpages%2Fprofile%2Findex'), '/pages/profile/index')
   assert.equal(safeLoginRedirect('%2Fpages%2Fassistant%2Findex'), '/pages/assistant/index')
   assert.equal(safeLoginRedirect('%invalid'), '/pages/ledger/index')
+})
+
+await check('未登录可以本地新增、编辑、统计和删除账单，重启后保留体验记录', async () => {
+  const { auth, ledger } = await fresh()
+  const expense = ledger.expense
+  const entry = { bookId: ledger.activeBookId, amount: 800, categoryId: 'food', date: `${ledger.selectedMonth}-01`, type: 'expense', note: '未登录体验早餐', account: '微信' }
+  assert.equal(await ledger.saveEntry(entry), true)
+  assert.equal(ledger.expense, expense + 800)
+  const saved = ledger.entries.find(item => item.note === entry.note)
+  assert.ok(saved)
+  assert.equal(await ledger.saveEntry({ ...entry, amount: 1250 }, saved.id), true)
+  assert.equal(ledger.expense, expense + 1250)
+  assert.equal(auth.user, null)
+  assert.equal(loginCount, 0)
+  const restarted = await fresh(false)
+  assert.ok(restarted.ledger.entries.some(item => item.id === saved.id && item.amount === 1250))
+  assert.equal(await restarted.ledger.deleteEntry(saved.id), true)
+  assert.equal(restarted.ledger.expense, expense)
 })
 
 await check('真实接口契约与单次登录请求，不把演示账单带入账号', async () => {
@@ -178,6 +205,34 @@ await check('401 清理失效凭证与当前账号内存，保留各账号持久
   assert.equal(ledger.accountId, null)
   assert.equal(storage.has(AUTH_STORAGE_KEY), false)
   assert.ok(storage.has(key))
+  assert.equal(route, 'pages/ledger/index')
+})
+
+await check('前台检查发现凭证到期时回到体验首页，不自动微信登录', async () => {
+  const { auth, ledger } = await fresh()
+  await auth.login()
+  const loginCountBefore = loginCount
+  const expiresAt = storage.get(AUTH_STORAGE_KEY).expiresAt
+  const now = Date.now
+  route = 'pages/record/index'
+  try {
+    Date.now = () => expiresAt + 1
+    await auth.verifyIfNeeded()
+  } finally { Date.now = now }
+  assert.equal(auth.user, null)
+  assert.equal(ledger.accountId, null)
+  assert.equal(storage.has(AUTH_STORAGE_KEY), false)
+  assert.equal(route, 'pages/ledger/index')
+  assert.equal(loginCount, loginCountBefore)
+})
+
+await check('登录页遇到失效凭证时保留自主重试入口', async () => {
+  const { auth } = await fresh()
+  await auth.login()
+  sessions.clear()
+  route = 'pages/login/index'
+  await auth.restore()
+  assert.equal(auth.user, null)
   assert.equal(route, 'pages/login/index')
 })
 
@@ -196,11 +251,13 @@ await check('网络失败保留已有账号与凭证，退出失败可以重试'
 await check('身份恢复返回另一用户时拒绝恢复，并清理旧账号内存', async () => {
   const { auth, ledger } = await fresh()
   await auth.login()
+  route = 'pages/record/index'
   handler = async () => ({ statusCode: 200, data: users[1] })
   await auth.restore()
   assert.equal(auth.user, null)
   assert.equal(ledger.accountId, null)
   assert.match(auth.error, /校验失败/)
+  assert.equal(route, 'pages/ledger/index')
 })
 
 await check('每次失败重试都重新取得 code，无凭证登录失败不会伪造用户', async () => {

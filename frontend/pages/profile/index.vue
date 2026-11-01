@@ -89,7 +89,7 @@ function logout() {
       if (!result.confirm) return
       try {
         await auth.logout()
-        uni.reLaunch({ url: '/pages/login/index' })
+        uni.reLaunch({ url: '/pages/ledger/index' })
       } catch (cause) { toast(cause instanceof Error ? cause.message : '退出失败，请重新尝试') }
     },
   })
@@ -101,7 +101,7 @@ function logout() {
     <TopBar title="我的" subtitle="生活有度，心里有数。" />
     <CloudStatus />
     <button v-if="store.legacyEntries.length" class="local-notice" @tap="exportLegacyEntries">升级前有 {{ store.legacyEntries.length }} 笔本机记录，尚未上传。点击导出 CSV</button>
-    <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '用微信登录，开始你的记录' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 个人账本使用云端' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
+    <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '可自愿登录，使用云端账本与同步' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 个人账本使用云端' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
     <view class="personal-stats panel"><view><text class="stat-value number">{{ recordedDays }}<text class="stat-unit"> 天</text></text><text class="stat-label">记过账的日子</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.entries.length }}<text class="stat-unit"> 笔</text></text><text class="stat-label">认真记录的生活</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.books.length }}<text class="stat-unit"> 本</text></text><text class="stat-label">专属生活账本</text></view></view>
     <button class="budget-preview" @tap="openBudget"><view class="budget-preview-top"><view class="row"><AppIcon name="wallet" :size="34" /><text>{{ store.activeBook.name }} · 月预算</text></view><AppIcon name="chevron" :size="26" /></view><view class="between budget-preview-bottom"><text class="budget-preview-amount number"><text>¥ </text>{{ money(store.activeBook.budget, 0) }}</text><text class="budget-progress-text">已使用 {{ budgetPercent }}%</text></view><view class="budget-track"><view :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></button>
     <view v-for="(group, index) in menuGroups" :key="index" class="menu-panel panel"><button v-for="item in group" :key="item.key" class="menu-row" @tap="menuAction(item.key)"><view class="menu-icon"><AppIcon :name="item.icon" :size="35" /></view><view class="menu-copy"><text class="menu-title">{{ item.title }}</text><text v-if="item.description && item.key !== 'about'" class="menu-description">{{ item.description }}</text></view><text v-if="item.key === 'about'" class="version-label">{{ item.description }}</text><AppIcon name="chevron" :size="25" /></button></view>

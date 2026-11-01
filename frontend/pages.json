@@ -1,16 +1,16 @@
 {
   "pages": [
     {
-      "path": "pages/login/index",
-      "style": {
-        "navigationBarTitleText": "登录墨记"
-      }
-    },
-    {
       "path": "pages/ledger/index",
       "style": {
         "navigationBarTitleText": "墨记",
         "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录墨记"
       }
     },
     {

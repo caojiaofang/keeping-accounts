@@ -53,13 +53,19 @@ export const useAuthStore = defineStore('auth', () => {
     await useLedgerStore().refreshCloud()
   }
 
+  function returnToBrowsing(message: string): void {
+    clearLocal(message)
+    const pages = getCurrentPages()
+    const route = pages[pages.length - 1]?.route
+    // 关闭旧账号的编辑页面，回到可直接体验的首页；登录页仍可由用户自主重试。
+    if (route !== 'pages/login/index' && route !== 'pages/ledger/index') {
+      uni.reLaunch({ url: '/pages/ledger/index' })
+    }
+  }
+
   onUnauthorized(token => {
     if (session?.accessToken !== token) return
-    clearLocal('登录已过期，请重新登录')
-    const pages = getCurrentPages()
-    if (pages[pages.length - 1]?.route !== 'pages/login/index') {
-      uni.reLaunch({ url: '/pages/login/index' })
-    }
+    returnToBrowsing('登录已过期，当前为本地体验，可在“我的”重新登录')
   })
 
   async function restoreImpl(): Promise<void> {
@@ -76,8 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
       const current = await apiRequest<AuthUser>('/api/v1/auth/me', { token: saved.accessToken })
       if (version !== revision) return
       if (!isAuthUser(current) || current.id !== saved.user.id) {
-        clearLocal('登录信息校验失败，请重新登录')
-        uni.reLaunch({ url: '/pages/login/index' })
+        returnToBrowsing('登录信息校验失败，当前为本地体验，可在“我的”重新登录')
         return
       }
       await activate({ ...saved, user: current })
@@ -156,8 +161,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function verifyIfNeeded(): Promise<void> {
     if (!ready.value || !session || busy.value) return
     if (session.expiresAt <= Date.now()) {
-      clearLocal('登录已过期，请重新登录')
-      uni.reLaunch({ url: '/pages/login/index' })
+      returnToBrowsing('登录已过期，当前为本地体验，可在“我的”重新登录')
     } else if (Date.now() - lastVerified > 60000) await restore()
     else await useLedgerStore().refreshCloud()
   }

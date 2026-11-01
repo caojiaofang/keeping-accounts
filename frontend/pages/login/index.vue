@@ -31,7 +31,13 @@ async function login() {
   if (auth.user) { finish(); uni.showToast({ title: '登录成功', icon: 'success' }) }
 }
 
-function guest() { auth.enterGuest(); if (!auth.busy) finish() }
+function guest() {
+  if (auth.busy) return
+  auth.enterGuest()
+  const home = () => uni.reLaunch({ url: '/pages/ledger/index' })
+  if (getCurrentPages().length > 1) uni.navigateBack({ fail: home })
+  else home()
+}
 function explain() {
   uni.showModal({
     title: '关于微信登录',
@@ -58,7 +64,7 @@ function explain() {
     <view class="login-actions">
       <view v-if="auth.error" class="login-error" role="alert"><AppIcon name="info" :size="29" /><text>{{ auth.error }}</text></view>
       <button class="wechat-login-button" :disabled="auth.busy" :loading="auth.loggingIn || auth.restoring" @tap="login"><text>{{ auth.restoring ? '正在恢复登录' : auth.loggingIn ? '正在微信登录' : auth.error ? '重新微信登录' : '微信登录' }}</text></button>
-      <button class="guest-entry" :disabled="auth.busy" @tap="guest">先体验一下</button>
+      <button class="guest-entry" :disabled="auth.busy" @tap="guest">暂不登录，继续体验</button>
       <view class="login-privacy"><AppIcon name="shield" :size="24" /><text>仅用于识别账号，不获取头像、昵称或手机号</text></view>
       <button class="login-explain" @tap="explain">登录说明</button>
     </view>

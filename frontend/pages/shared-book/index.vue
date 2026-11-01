@@ -55,7 +55,7 @@ onShow(async () => {
 onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
 onShareAppMessage(() => invitationValid.value && store.accountId ? {
   title: `邀请你加入「${book.value?.name || '共同账本'}」`, path: invitationPath(invitationToken.value),
-} : { title: '墨记，把日子一笔一笔记好', path: '/pages/login/index' })
+} : { title: '墨记，把日子一笔一笔记好', path: '/pages/ledger/index' })
 function selectAndOpen(path: string) {
   if (!book.value) return
   store.selectBook(book.value.id)
