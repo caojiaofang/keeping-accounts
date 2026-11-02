@@ -11,17 +11,20 @@ const envNames = new Map([
 
 let envVersion = 'develop'
 // #ifdef MP-WEIXIN
+envVersion = 'unknown'
 try {
   const accountInfo = uni.getAccountInfoSync()
-  envVersion = accountInfo.miniProgram?.envVersion || 'develop'
+  envVersion = accountInfo.miniProgram?.envVersion || 'unknown'
 } catch {
-  // 非微信预览或账号信息读取失败时使用本地开发环境。
+  // 微信环境信息不可用时连接正式服务，避免审核或真机请求手机自身的 localhost。
 }
 // #endif
 
+const isProductionBuild = import.meta.env?.PROD === true
+
 export const appConfig = {
-  // 仅开发版连接本地环境，体验版、正式版及未知版本均连接正式环境。
-  apiBaseUrl: (envVersion === 'develop' ? DEV_BASE_URL : PROD_BASE_URL).replace(/\/+$/, ''),
+  // 发行包始终连接正式服务；只有开发构建且明确为开发环境时才允许使用本地地址。
+  apiBaseUrl: (!isProductionBuild && envVersion === 'develop' ? DEV_BASE_URL : PROD_BASE_URL).replace(/\/+$/, ''),
   envVersion,
   envName: envNames.get(envVersion) || '未知版本',
   requestTimeout: 15000,
