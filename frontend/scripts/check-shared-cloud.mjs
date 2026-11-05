@@ -172,4 +172,60 @@ await check('成员失效后的刷新清除共同记录，修改人仍按真实�
   assert.equal(ledger.entries.some(e => e.bookId === id), false)
 })
 
+await check('聊天账单入口重新读取当前记录，已删除或移出账本不能用旧缓存打开', async () => {
+  const { ledger } = await fresh()
+  const entry = { id: 'reference', bookId: ledger.activeBookId, type: 'expense', categoryId: 'food', amount: 100, note: '旧备注', date: '2026-11-05', account: '微信', createdAt: 1, createdBy: users[0].id }
+  entries.push(entry); await ledger.refreshCloud()
+  entries[0] = { ...entry, note: '云端新备注', version: 2 }
+  const current = await ledger.readEntryReference(entry.id, entry.bookId)
+  assert.equal(current.entry.note, '云端新备注')
+  assert.equal(ledger.entries.find(item => item.id === entry.id).version, 2)
+  entries = []
+  await assert.rejects(ledger.readEntryReference(entry.id, entry.bookId), /已删除或移出/)
+  entries = [{ ...entry, bookId: 'another-book' }]
+  await assert.rejects(ledger.readEntryReference(entry.id, entry.bookId), /已删除或移出/)
+})
+
+await check('共同账单可只读查看他人记录，当前成员失效后入口拒绝访问', async () => {
+  const { auth, ledger } = await fresh()
+  const id = await ledger.addBook('家庭', true), invite = await ledger.createInvitation(id)
+  entries.push({ id: 'owner-entry', bookId: id, type: 'expense', categoryId: 'food', amount: 500, note: '共同账单', date: '2026-11-05', account: '微信', createdAt: 1, createdBy: users[0].id })
+  await login(auth, users[1]); await ledger.acceptInvitation(invite.token, '小林'); ledger.selectBook(id)
+  const current = await ledger.readEntryReference('owner-entry', id)
+  assert.equal(canEditEntry(current.book, current.entry), false)
+  books.get(id).members.find(member => member.userId === users[1].id).status = 'removed'
+  await assert.rejects(ledger.readEntryReference('owner-entry', id), /无法访问这个账本/)
+})
+
+await check('账单入口遇到写入、断网、账号切换或账本切换时不回填旧数据', async () => {
+  const { ledger } = await fresh()
+  const id = ledger.activeBookId
+  entries.push({ id: 'race', bookId: id, type: 'expense', categoryId: 'food', amount: 100, note: '', date: '2026-11-05', account: '微信', createdAt: 1, createdBy: users[0].id })
+  let finishWrite
+  handler = () => new Promise(done => { finishWrite = done })
+  const writing = ledger.saveEntry(entries[0])
+  await Promise.resolve()
+  await assert.rejects(ledger.readEntryReference('race', id), /正在保存账单/)
+  finishWrite(fail(503, '保存失败'))
+  assert.equal(await writing, false)
+  handler = async () => { throw new Error('offline') }
+  await assert.rejects(ledger.readEntryReference('race', id), /连接不到服务/)
+  handler = server
+  let resolve
+  handler = options => new Promise(done => { resolve = async () => done(await server(options)) })
+  const pending = ledger.readEntryReference('race', id)
+  await Promise.resolve()
+  ledger.activeBookId = 'other'
+  await resolve()
+  await assert.rejects(pending, /状态已变化/)
+  assert.equal(ledger.entries.some(item => item.id === 'race'), false)
+  ledger.activeBookId = id
+  const switched = ledger.readEntryReference('race', id)
+  await Promise.resolve()
+  ledger.switchAccount(null)
+  await resolve()
+  await assert.rejects(switched, /状态已变化/)
+  assert.equal(ledger.entries.some(item => item.id === 'race'), false)
+})
+
 console.log(`云端多人账本检查完成：${passed} 项通过；仅使用模拟服务与内存。`)

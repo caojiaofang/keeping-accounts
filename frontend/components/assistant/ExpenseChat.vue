@@ -1,33 +1,43 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import ResultCard from './cards/ResultCard.vue'
 import { analysisQuestions, buildDemoAnalysis } from '@/common/mock/assistant'
 import type { AnalysisResult, AnalysisTopic } from '@/common/mock/assistant'
 import { categories } from '@/common/data/categories'
 import { useLedgerStore } from '@/store/ledger'
-import { useChatStore } from '@/store/chat'
+import { isV2Turn, useChatStore } from '@/store/chat'
+import type { FactRefV2, ResultCardV2, SuggestionV2 } from '@/common/types/chat-v2'
+import { followsLatest } from '@/common/services/chat-scroll'
 import { money, monthLabel } from '@/common/utils/format'
 
 defineOptions({ options: { virtualHost: true } })
 const props = defineProps<{ month: string; active: boolean }>()
 const store = useLedgerStore()
-interface Message { id: number | string; role: 'user' | 'assistant'; text: string; result?: AnalysisResult; bookName?: string }
+interface Message { id: number | string; role: 'user' | 'assistant'; text: string; result?: AnalysisResult; bookName?: string; cards?: ResultCardV2[]; facts?: FactRefV2[]; completeness?: 'complete' | 'partial'; missing?: string[] }
+interface Question { text: string; topic?: AnalysisTopic; categoryId?: string; suggestion?: SuggestionV2 }
 const demoMessages = ref<Message[]>([])
 const chat = useChatStore()
 const historyOpen = ref(false)
+const legacyTab = ref(false)
+const historyItems = computed(() => legacyTab.value ? chat.legacyHistory : chat.history)
 const busy = computed(() => !!store.accountId && chat.busy)
-const blocked = computed(() => busy.value || (!!store.accountId && !!chat.pending))
+const blocked = computed(() => busy.value || (!!store.accountId && (!!chat.pending || !chat.ready || chat.legacyReadonly)))
 const messages = computed<Message[]>(() => store.accountId ? [
   ...chat.turns.flatMap(turn => [
     { id: `${turn.id}-user`, role: 'user' as const, text: turn.text },
-    { id: `${turn.id}-assistant`, role: 'assistant' as const, text: turn.answer, result: turn.result, bookName: store.activeBook.name },
+    { id: `${turn.id}-assistant`, role: 'assistant' as const, text: turn.answer, result: isV2Turn(turn) ? undefined : turn.result, bookName: store.activeBook.name, ...(isV2Turn(turn) ? { cards: turn.cards, facts: turn.factRefs, completeness: turn.completeness, missing: turn.missing } : {}) },
   ]),
   ...(chat.pending ? [{ id: chat.pending.id, role: 'user' as const, text: chat.pending.text }] : []),
-  ...(chat.preview ? [{ id: 'stream-preview', role: 'assistant' as const, text: chat.preview.answer, result: chat.preview.result, bookName: store.activeBook.name }] : []),
+  ...(chat.preview ? [{ id: 'stream-preview', role: 'assistant' as const, text: chat.preview.answer, result: 'schemaVersion' in chat.preview ? undefined : chat.preview.result, bookName: store.activeBook.name, ...('schemaVersion' in chat.preview ? { cards: chat.preview.cards, facts: chat.preview.factRefs, completeness: chat.preview.completeness, missing: chat.preview.missing } : {}) }] : []),
 ] : demoMessages.value)
 let loadedScope = ''
 const input = ref('')
 const anchor = ref('')
+const following = ref(true)
+const viewportHeight = ref(0)
+const instance = getCurrentInstance()
+let previousTop = 0
 const focusCategory = ref<string>()
 const sequence = ref(0)
 const lastRankingCategory = ref('food')
@@ -35,38 +45,81 @@ const rankingCategory = computed(() => {
   if (!store.accountId) return lastRankingCategory.value
   if (chat.context?.categoryId) return chat.context.categoryId
   const latest = chat.turns[chat.turns.length - 1]
-  return categories.find(category => category.type === chat.context?.entryType && category.name === latest?.result?.rows[0]?.label)?.id || (chat.context?.entryType === 'income' ? 'salary' : 'food')
+  return categories.find(category => category.type === chat.context?.entryType && category.name === (latest && !isV2Turn(latest) ? latest.result?.rows[0]?.label : undefined))?.id || (chat.context?.entryType === 'income' ? 'salary' : 'food')
 })
 watch([() => store.accountId, () => store.activeBookId, () => store.cloudReady, () => props.month, () => props.active], async () => {
   if (!store.accountId) { loadedScope = ''; return }
-  if (!props.active || !store.cloudReady) return
+  if (!props.active) { chat.suspend(); return }
+  if (!store.cloudReady) return
   const scope = `${store.accountId}:${store.activeBookId}:${props.month}`
-  if (loadedScope === scope) return
+  if (loadedScope === scope && chat.ready) { measureViewport(); return }
   loadedScope = scope
   input.value = ''
   historyOpen.value = false
   await chat.load(props.month)
-  void scrollToBottom()
+  measureViewport()
+  void scrollToBottom(true)
 }, { immediate: true })
-const suggestions = computed(() => messages.value.length ? [
+const suggestions = computed<Question[]>(() => store.accountId && chat.protocol === 'v2' && messages.value.length ? chat.suggestions.map(suggestion => ({ text: suggestion.text, suggestion })) : messages.value.length ? [
   { text: `展开${store.categoryOf(rankingCategory.value).name}明细`, topic: 'details' as const, categoryId: rankingCategory.value },
   { text: (store.accountId ? chat.context?.categoryId : focusCategory.value) ? '这一类和上月相比呢？' : '和上个月相比呢？', topic: 'compare' as const, categoryId: focusCategory.value },
   { text: '列出超过200元的消费', topic: 'large' as const, categoryId: undefined },
   { text: '有哪些支出可以减少？', topic: 'advice' as const, categoryId: undefined },
 ] : analysisQuestions.map(item => ({ ...item, categoryId: item.topic === 'details' ? 'food' : undefined })))
+const scopeLabel = computed(() => {
+  const filters = chat.contextV2?.filters
+  return store.accountId && filters ? `${filters.dateRange.start} 至 ${filters.dateRange.end} · ${filters.entryType === 'expense' ? '支出' : filters.entryType === 'income' ? '收入' : '收支'}` : `${monthLabel(store.accountId ? chat.context?.month || chat.initialMonth || props.month : props.month)} · 收支分析`
+})
+onBeforeUnmount(() => chat.suspend())
+async function askQuestion(question: Question) {
+  if (question.suggestion && store.accountId) {
+    if (!blocked.value) { void scrollToBottom(true); await chat.sendSuggestion(question.suggestion); void scrollToBottom() }
+  } else await ask(question.text, question.topic, question.categoryId)
+}
+async function retryMessage() { void scrollToBottom(true); await chat.retry(); void scrollToBottom() }
 
-async function scrollToBottom() {
+async function scrollToBottom(force = false) {
+  if (force) { following.value = true; previousTop = 0 }
+  if (!following.value) return
   anchor.value = ''
   await nextTick()
+  if (!following.value) return
   anchor.value = 'conversation-end'
 }
-watch(() => chat.preview?.answer, () => { void scrollToBottom() })
+function measureViewport() {
+  void nextTick(() => {
+    if (!instance?.proxy) return
+    uni.createSelectorQuery().in(instance.proxy).select('.conversation-scroll').boundingClientRect(rect => {
+      if (rect && !Array.isArray(rect) && typeof rect.height === 'number') viewportHeight.value = rect.height
+    }).exec()
+  })
+}
+onMounted(measureViewport)
+function onScroll(event: { detail: { scrollTop: number; scrollHeight: number } }) {
+  const { scrollTop, scrollHeight } = event.detail
+  following.value = followsLatest(previousTop, scrollTop, scrollHeight, viewportHeight.value, following.value)
+  previousTop = scrollTop
+  if (!following.value) anchor.value = ''
+}
+async function loadEarlier() {
+  following.value = false
+  const first = messages.value[0]?.id
+  anchor.value = ''
+  await chat.loadEarlier()
+  await nextTick()
+  if (first !== undefined) anchor.value = `chat-message-${first}`
+}
+function openEntry(message: Message, card: ResultCardV2, entryId: string) {
+  if (message.id === 'stream-preview' || !card.rows.some(row => row.entryId === entryId)) return
+  uni.navigateTo({ url: `/pages/entry/index?id=${encodeURIComponent(entryId)}&bookId=${encodeURIComponent(store.activeBookId)}` })
+}
+watch(() => [chat.preview, chat.preview?.answer, chat.turns.length, chat.progress], () => { void scrollToBottom() })
 async function ask(text: string, topic?: AnalysisTopic, categoryId?: string) {
   if (store.accountId) {
     if (busy.value || !text.trim()) return
     input.value = ''
     const task = chat.send(text)
-    void scrollToBottom()
+    void scrollToBottom(true)
     await task
     void scrollToBottom()
     return
@@ -103,24 +156,29 @@ function reset() {
 
 async function reload() {
   if (busy.value) return
-  if (chat.conversationId) await chat.read(chat.conversationId)
-  else await chat.load(props.month)
-  void scrollToBottom()
+  if (chat.conversationId) await (chat.legacyReadonly ? chat.readLegacy(chat.conversationId) : chat.read(chat.conversationId))
+  else await chat.load(props.month, true)
+  void scrollToBottom(true)
 }
-async function openHistory() { if (busy.value) return; historyOpen.value = true; await chat.refreshHistory() }
-async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpen.value = false; void scrollToBottom() } }
+async function openHistory() { if (busy.value) return; legacyTab.value = false; historyOpen.value = true; await chat.refreshHistory() }
+async function switchHistory() { legacyTab.value = !legacyTab.value; await (legacyTab.value ? chat.refreshLegacyHistory() : chat.refreshHistory()) }
+async function chooseHistory(id: string) { if (await (legacyTab.value ? chat.readLegacy(id) : chat.read(id))) { historyOpen.value = false; void scrollToBottom(true) } }
+async function continueLegacy() { if (await chat.startFromLegacy()) { historyOpen.value = false; void scrollToBottom(true) } }
 </script>
 
 <template>
   <view class="chat-panel">
-    <view class="chat-toolbar"><text>{{ monthLabel(store.accountId ? chat.context?.month || month : month) }} · 收支分析</text><button v-if="store.accountId" class="new-conversation" :disabled="busy" @tap="openHistory">历史</button><button class="new-conversation" :disabled="busy" @tap="reset"><AppIcon name="plus" :size="23" />新对话</button></view>
-    <scroll-view scroll-y class="conversation-scroll" :scroll-into-view="anchor" scroll-with-animation>
-      <view class="conversation-body"><button v-if="store.accountId && chat.hasMore" class="older-turns" :disabled="busy" @tap="chat.loadEarlier()">查看更早的对话</button>
+    <view class="chat-toolbar"><text>{{ scopeLabel }}</text><button v-if="store.accountId" class="new-conversation" :disabled="busy" @tap="openHistory">历史</button><button class="new-conversation" :disabled="busy" @tap="reset"><AppIcon name="plus" :size="23" />新对话</button></view>
+    <view v-if="chat.legacyReadonly" class="chat-status">旧版对话只读，保留原始回答和统计快照。<button class="older-turns" :disabled="busy" @tap="continueLegacy">基于此对话开始新版续聊</button></view>
+    <scroll-view scroll-y class="conversation-scroll" :scroll-into-view="anchor" @scroll="onScroll">
+      <view class="conversation-body"><button v-if="store.accountId && chat.hasMore" class="older-turns" :disabled="busy" @tap="loadEarlier">查看更早的对话</button>
         <view v-if="!messages.length && !busy" class="chat-welcome"><view class="assistant-mark"><AppIcon name="leaf" :size="53" light /></view><text class="welcome-title">钱花在哪，一起聊清楚。</text><text class="welcome-copy">从一笔早餐，到一个月的生活，
-让每笔记录都有回响。</text><view class="welcome-scope"><AppIcon name="book" :size="27" /><text>只分析「{{ store.activeBook.name }}」</text></view><view class="suggested-title">可以从这些问题开始</view><button v-for="question in suggestions" :key="question.text" class="welcome-question" :disabled="blocked" @tap="ask(question.text, question.topic, question.categoryId)"><text>{{ question.text }}</text><AppIcon name="arrow" :size="26" /></button><text class="welcome-note">{{ store.accountId ? '按需读取当前账本进行分析，对话保存在云端；模型只会收到本轮所需的统计或明细。' : '体验模式根据当前账本演示分析；微信登录后支持自由提问和历史对话。' }}</text></view>
-        <view v-for="message in messages" :key="message.id" class="message" :class="message.role">
+让每笔记录都有回响。</text><view class="welcome-scope"><AppIcon name="book" :size="27" /><text>只分析「{{ store.activeBook.name }}」</text></view><view class="suggested-title">可以从这些问题开始</view><button v-for="question in suggestions" :key="question.text" class="welcome-question" :disabled="blocked" @tap="ask(question.text, question.topic, question.categoryId)"><text>{{ question.text }}</text><AppIcon name="arrow" :size="26" /></button><text class="welcome-note">{{ store.accountId ? '按需读取当前账本进行分析，对话保存在云端；模型会收到必要的统计或明细，按人查询时还会使用相关记账人信息。' : '体验模式根据当前账本演示分析；微信登录后支持自由提问和历史对话。' }}</text></view>
+        <view v-for="message in messages" :id="`chat-message-${message.id}`" :key="message.id" class="message" :class="message.role">
           <view v-if="message.role === 'assistant'" class="message-author"><view class="small-mark"><AppIcon name="leaf" :size="24" light /></view><text>墨记助手</text><text class="local-answer">{{ store.accountId ? '智能分析' : '本地演示' }}</text></view>
           <view class="message-bubble"><text class="message-text" selectable>{{ message.text }}</text>
+            <view v-if="message.completeness === 'partial'" class="partial-note"><text>部分完成</text><text v-for="(reason, index) in message.missing" :key="index">{{ reason }}</text></view>
+            <ResultCard v-for="card in message.cards" :key="card.id" :card="card" :facts="message.facts || []" :book="store.activeBook" :partial="message.completeness === 'partial'" :interactive="message.id !== 'stream-preview'" @open="openEntry(message, card, $event)" />
             <view v-if="message.result" class="answer-card">
               <text class="answer-scope">{{ message.bookName }} · {{ message.result.scope }}</text><text class="answer-title">{{ message.result.title }}</text>
               <view class="answer-total"><text class="answer-currency">¥</text><text class="answer-value number">{{ money(message.result.total) }}</text><text class="answer-count">{{ message.result.count }} 笔{{ message.result.entryType === 'income' ? '收入' : '支出' }}</text></view>
@@ -131,18 +189,20 @@ async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpe
         </view>
         <view v-if="store.accountId && busy" class="chat-status">{{ chat.sending ? chat.progress || '正在分析…' : '正在读取对话…' }}</view>
         <view v-if="store.accountId && chat.preview && !chat.sending" class="chat-status">以上为尚未确认保存的回答，可重新读取或重试。</view>
-        <view v-if="store.accountId && chat.error" class="chat-error"><text>{{ chat.error }}</text><view><button v-if="chat.pending" :disabled="busy" @tap="ask(chat.pending.text)">重试这条消息</button><button :disabled="busy" @tap="reload">重新读取</button></view></view>
-        <view v-if="messages.length" class="followup"><text class="followup-caption">接着问问</text><view class="followup-list"><button v-for="question in suggestions" :key="question.text" class="followup-question" :disabled="blocked" @tap="ask(question.text, question.topic, question.categoryId)">{{ question.text }}<AppIcon name="plus" :size="22" /></button></view></view>
+        <view v-if="store.accountId && chat.error" class="chat-error"><text>{{ chat.error }}</text><view><button v-if="chat.pending" :disabled="busy" @tap="retryMessage">重试这条消息</button><button :disabled="busy" @tap="reload">重新读取</button></view></view>
+        <view v-if="messages.length && suggestions.length" class="followup"><text class="followup-caption">接着问问</text><view class="followup-list"><button v-for="question in suggestions" :key="question.suggestion?.id || question.text" class="followup-question" :disabled="blocked" @tap="askQuestion(question)">{{ question.text }}<AppIcon name="plus" :size="22" /></button></view></view>
         <view id="conversation-end" class="conversation-end" />
       </view>
     </scroll-view>
-    <view class="chat-composer"><view class="compose-box"><view class="chat-input-wrap"><textarea v-model="input" class="chat-input" :placeholder="store.accountId ? '问问这月的收支，也可以接着追问' : '问问这月的花费，或点选示例问题'" :disabled="blocked" :maxlength="200" auto-height :disable-default-padding="true" :adjust-position="true" :cursor-spacing="24" confirm-type="send" @confirm="ask(input)" /></view><button class="send-message" :disabled="blocked || !input.trim()" aria-label="发送消息" @tap="ask(input)"><AppIcon name="arrow" :size="31" light /></button></view><text class="composer-note">基于已记录的账单分析，实际收支以你的核对为准</text></view>
-    <view v-if="historyOpen" class="sheet-mask" @tap="historyOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">最近的分析对话</text><button class="icon-button" aria-label="关闭历史对话" @tap="historyOpen = false"><AppIcon name="close" :size="30" /></button></view><scroll-view scroll-y class="history-list"><button v-for="item in chat.history" :key="item.id" class="history-item" :disabled="busy" @tap="chooseHistory(item.id)"><text>{{ item.title }}</text><text>{{ monthLabel(item.month) }}</text></button><text v-if="!chat.history.length" class="chat-status">当前账本和月份还没有已保存的对话</text></scroll-view><text class="welcome-note">展示当前账本及入口月份最近二十个对话</text></view></view>
+    <view v-if="!following && messages.length" class="latest-bar"><button @tap="scrollToBottom(true)">回到最新内容</button></view>
+    <view class="chat-composer"><view class="compose-box"><view class="chat-input-wrap"><textarea v-model="input" class="chat-input" :placeholder="store.accountId ? '问问这月的收支，也可以接着追问' : '问问这月的花费，或点选示例问题'" :disabled="blocked" :maxlength="200" auto-height :disable-default-padding="true" :adjust-position="true" :cursor-spacing="24" confirm-type="send" @keyboardheightchange="measureViewport" @linechange="measureViewport" @confirm="ask(input)" /></view><button class="send-message" :disabled="blocked || !input.trim()" aria-label="发送消息" @tap="ask(input)"><AppIcon name="arrow" :size="31" light /></button></view><text class="composer-note">基于已记录的账单分析，实际收支以你的核对为准</text></view>
+    <view v-if="historyOpen" class="sheet-mask" @tap="historyOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">最近的分析对话</text><button class="icon-button" aria-label="关闭历史对话" @tap="historyOpen = false"><AppIcon name="close" :size="30" /></button></view><button v-if="chat.protocol === 'v2'" class="older-turns" :disabled="busy" @tap="switchHistory">{{ legacyTab ? '返回新版对话' : '查看入口月份的旧版对话' }}</button><scroll-view scroll-y class="history-list"><button v-for="item in historyItems" :key="item.id" class="history-item" :disabled="busy" @tap="chooseHistory(item.id)"><text>{{ item.title }}</text><text>{{ monthLabel('initialMonth' in item ? item.initialMonth : item.month) }}</text></button><text v-if="!historyItems.length" class="chat-status">当前范围还没有已保存的对话</text></scroll-view><text class="welcome-note">{{ chat.protocol === 'v2' && !legacyTab ? '展示当前账本最近二十个对话，包含不同入口月份' : '展示当前账本及入口月份最近二十个对话' }}</text></view></view>
   </view>
 </template>
 
 <style scoped lang="scss">
 .chat-status { padding: 20rpx 0; font-size: 23rpx; color: #77927e; }
+.partial-note { display: flex; flex-direction: column; gap: 8rpx; margin-top: 16rpx; font-size: 22rpx; color: #946449; }
 .chat-error { padding: 20rpx; margin-bottom: 24rpx; border-radius: 16rpx; background: #f8eee5; font-size: 24rpx; color: #946449; }
 .chat-error > view { display: flex; gap: 24rpx; margin-top: 16rpx; }
 .chat-error button, .older-turns { font-size: 23rpx; color: #285e4e; }
@@ -156,6 +216,8 @@ async function chooseHistory(id: string) { if (await chat.read(id)) { historyOpe
 .new-conversation { display: flex; align-items: center; gap: 5rpx; font-size: 22rpx; color: #668671; padding: 7rpx 0 7rpx 18rpx; }
 .new-conversation[disabled] { background: transparent; color: #a6b2a9; }
 .conversation-scroll { flex: 1; height: 0; min-height: 0; }
+.latest-bar { flex-shrink: 0; padding: 10rpx 36rpx; background: #edf3ee; }
+.latest-bar button { display: block; color: #285e4e; font-size: 24rpx; padding: 10rpx; }
 .conversation-body { padding: 25rpx 36rpx 0; }
 .chat-welcome { padding: 14rpx 0 28rpx; }
 .assistant-mark { display: flex; align-items: center; justify-content: center; width: 91rpx; height: 91rpx; background: #285e4e; border-radius: 30rpx 30rpx 30rpx 9rpx; margin-bottom: 28rpx; }

@@ -1,4 +1,5 @@
 import type { AnalysisResult } from '@/common/mock/assistant'
+export type * from './chat-v2'
 
 export interface ChatContext {
   month: string

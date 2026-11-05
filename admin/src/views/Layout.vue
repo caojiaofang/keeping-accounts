@@ -5,9 +5,18 @@ import { DataAnalysis, User, Notebook, SwitchButton, Menu, Close, Lock, Setting,
 import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import { api, auth } from '../api'
 import { errorMessage } from '../format'
+import { accountFeaturesEnabled } from '../features'
 
 const route = useRoute(), router = useRouter(), menuOpen = ref(false), busy = ref(false)
-const navigation = [{ path: '/', name: '数据概览', icon: DataAnalysis }, { path: '/users', name: '用户查询', icon: User }, { path: '/books', name: '账本查询', icon: Notebook }, { path: '/account', name: '账号设置', icon: Setting }, { path: '/login-logs', name: '登录日志', icon: Clock }]
+const navigation = [
+  { path: '/', name: '数据概览', icon: DataAnalysis },
+  { path: '/users', name: '用户查询', icon: User },
+  { path: '/books', name: '账本查询', icon: Notebook },
+  ...(accountFeaturesEnabled ? [
+    { path: '/account', name: '账号设置', icon: Setting },
+    { path: '/login-logs', name: '登录日志', icon: Clock },
+  ] : []),
+]
 async function logout() {
   busy.value = true
   try { await api('/auth/logout', { method: 'POST' }); auth.user = null; auth.checked = true; await router.replace('/login') }

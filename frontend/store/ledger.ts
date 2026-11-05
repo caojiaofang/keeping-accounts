@@ -6,8 +6,9 @@ import type { Book, BookActivity, BookInvitation, Entry } from '@/common/types'
 import { localDate, toast } from '@/common/utils/format'
 import { canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, familyExample, newSharedBook, validInvitation } from '@/common/services/shared-books'
 import { API_BASE_URL, apiRequest } from '@/common/api/request'
-import { chatStream } from '@/common/api/chat-stream'
+import { chatStream, chatStreamV2 } from '@/common/api/chat-stream'
 import type { ChatStreamEvent } from '@/common/types/chat'
+import type { ChatStreamEventV2 } from '@/common/types/chat-v2'
 import { newId } from '@/common/utils/id'
 import type { AssistantDraft } from '@/common/mock/assistant'
 import type { RecordInput, RecordResult } from '@/common/types/record'
@@ -189,8 +190,9 @@ export const useLedgerStore = defineStore('ledger', () => {
   async function chatRequest<T>(path: string, options: { method?: 'GET' | 'POST'; data?: Record<string, unknown> } = {}): Promise<T> {
     if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
     const user = accountId.value
+    const book = activeBookId.value, token = cloudToken
     const result = await apiRequest<T>(`/api/v1/assistant${path}`, { ...options, token: cloudToken, timeout: 100000 })
-    if (user !== accountId.value) throw new Error('账号已变化，请重新打开对话')
+    if (user !== accountId.value || book !== activeBookId.value || token !== cloudToken) throw new Error('账号或账本已变化，请重新打开对话')
     return result
   }
 
@@ -202,9 +204,33 @@ export const useLedgerStore = defineStore('ledger', () => {
     return result
   }
 
+  async function readEntryReference(id: string, bookId: string): Promise<{ entry: Entry; book: Book }> {
+    if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
+    if (writing.value) throw new Error('正在保存账单，请稍后重新打开')
+    if (bookId !== activeBookId.value) throw new Error('账本已变化，请返回当前对话重新打开账单')
+    const user = accountId.value, token = cloudToken, version = revision
+    // 每次打开都读取鉴权后的最新快照，不能用聊天历史或本机缓存判断可见性。
+    const state = await apiRequest<StoredState>('/api/v1/ledger', { token })
+    if (user !== accountId.value || token !== cloudToken || bookId !== activeBookId.value || version !== revision) throw new Error('账号或账本状态已变化，请重新打开账单')
+    if (!Array.isArray(state.books) || !Array.isArray(state.entries)) throw new Error('账单响应不完整，请重试')
+    const book = state.books.find(item => item.id === bookId)
+    if (!book || !canWriteBook(book, user)) throw new Error('当前已无法访问这个账本，可能已退出或被移出')
+    const entry = state.entries.find(item => item.id === id && item.bookId === bookId)
+    if (!entry) throw new Error('这笔账单已删除或移出当前账本；历史回答保留原统计快照')
+    books.value = books.value.map(item => item.id === bookId ? book : item)
+    entries.value = [...entries.value.filter(item => item.id !== id), entry]
+    persist()
+    return { entry, book }
+  }
+
   function streamChat(path: string, data: Record<string, unknown>, receive: (event: ChatStreamEvent) => void) {
     if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
     return chatStream(`/api/v1/assistant${path}`, cloudToken, data, receive)
+  }
+
+  function streamChatV2(path: string, data: Record<string, unknown>, receive: (event: ChatStreamEventV2) => void) {
+    if (!accountId.value || !cloudToken || !cloudReady.value) throw new Error('请先登录并连接云端账本')
+    return chatStreamV2(`/api/v1/assistant/v2${path}`, cloudToken, data, receive)
   }
 
   function saveEntry(entry: Omit<Entry, 'id' | 'createdAt' | 'createdBy' | 'updatedBy' | 'updatedAt'>, id?: string, requestId?: string): boolean | Promise<boolean> {
@@ -404,5 +430,5 @@ export const useLedgerStore = defineStore('ledger', () => {
     return categories.find(category => category.id === id) || categories[11]
   }
 
-  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, recognizeDrafts, recordDrafts, chatRequest, streamChat, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
+  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, readEntryReference, recognizeDrafts, recordDrafts, chatRequest, streamChat, streamChatV2, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
 })

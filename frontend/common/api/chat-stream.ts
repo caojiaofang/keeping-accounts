@@ -1,7 +1,10 @@
 import { API_BASE_URL, ApiError, notifyUnauthorized } from '@/common/api/request'
 import type { ChatStreamEvent, ChatTurn } from '@/common/types/chat'
+import type { ChatStreamEventV2, ChatTurnV2 } from '@/common/types/chat-v2'
+import { decodeEventV2 } from '@/common/api/chat-v2-codec'
 
 export interface ChatStreamTask { promise: Promise<ChatTurn>; cancel: () => void }
+export interface ChatStreamTaskV2 { promise: Promise<ChatTurnV2>; cancel: () => void }
 
 // 微信运行环境不保证提供 TextDecoder；保留跨分片的 UTF-8 字节。
 export class StreamDecoder {
@@ -30,9 +33,9 @@ export class StreamDecoder {
   }
 }
 
-export class ChatEventParser {
+class EventParser<E> {
   private buffer = ''
-  constructor(private receive: (event: ChatStreamEvent) => void) {}
+  constructor(private receive: (event: E) => void, private decode: (event: string, data: unknown) => E | undefined) {}
   push(text: string): void {
     this.buffer += text
     if (this.buffer.length > 1000000) throw new Error('流式响应过长')
@@ -46,33 +49,52 @@ export class ChatEventParser {
         if (line.startsWith('event:')) event = line.slice(6).trim()
         if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
       }
-      if (data.length && event !== 'ping') this.receive({ event, data: JSON.parse(data.join('\n')) } as ChatStreamEvent)
+      if (data.length) {
+        const value = this.decode(event, JSON.parse(data.join('\n')))
+        if (value) this.receive(value)
+      }
     }
   }
 }
 
+const legacyEvent = (event: string, data: unknown): ChatStreamEvent | undefined => event === 'ping' ? undefined : { event, data } as ChatStreamEvent
+export class ChatEventParser extends EventParser<ChatStreamEvent> {
+  constructor(receive: (event: ChatStreamEvent) => void) { super(receive, legacyEvent) }
+}
+export class ChatEventParserV2 extends EventParser<ChatStreamEventV2> {
+  constructor(receive: (event: ChatStreamEventV2) => void) { super(receive, decodeEventV2) }
+}
+
 export function chatStream(path: string, token: string, data: Record<string, unknown>, receive: (event: ChatStreamEvent) => void): ChatStreamTask {
+  return stream<ChatStreamEvent, ChatTurn>(path, token, data, receive, legacyEvent)
+}
+export function chatStreamV2(path: string, token: string, data: Record<string, unknown>, receive: (event: ChatStreamEventV2) => void): ChatStreamTaskV2 {
+  return stream<ChatStreamEventV2, ChatTurnV2>(path, token, data, receive, (kind, value) => decodeEventV2(kind, value, String(data.id)))
+}
+function stream<E extends { event: string; data: unknown }, T>(path: string, token: string, data: Record<string, unknown>, receive: (event: E) => void, decode: (event: string, data: unknown) => E | undefined): { promise: Promise<T>; cancel: () => void } {
   let abort = () => {}, settled = false
   let rejectRequest: (error: Error) => void = () => {}
-  const promise = new Promise<ChatTurn>((resolve, reject) => {
+  const promise = new Promise<T>((resolve, reject) => {
     rejectRequest = reject
     const fail = (cause: unknown) => {
       if (settled) return
       settled = true
       reject(cause instanceof Error ? cause : new Error('连接中断，请重新读取或重试这条消息'))
+      abort()
     }
-    const parser = new ChatEventParser(event => {
+    const parser = new EventParser<E>(event => {
       if (settled) return
       if (event.event === 'error') {
-        if (event.data.status === 401) notifyUnauthorized(token)
-        fail(new ApiError(event.data.detail, event.data.status))
+        const failure = event.data as { status: number; detail: string }
+        if (failure.status === 401) notifyUnauthorized(token)
+        fail(new ApiError(failure.detail, failure.status))
       } else if (event.event === 'done') {
         settled = true
-        resolve(event.data)
+        resolve(event.data as T)
       } else receive(event)
-    })
+    }, decode)
     const decoder = new StreamDecoder()
-    const push = (value: ArrayBuffer) => { try { parser.push(decoder.decode(value)) } catch (error) { fail(error); abort() } }
+    const push = (value: ArrayBuffer) => { if (!settled) { try { parser.push(decoder.decode(value)) } catch (error) { fail(error) } } }
     const finish = () => {
       try { parser.push(decoder.decode(new ArrayBuffer(0), true)) } catch (error) { fail(error) }
       if (!settled) fail(new Error('回答连接已中断，请重新读取或重试这条消息'))
@@ -89,17 +111,17 @@ export function chatStream(path: string, token: string, data: Record<string, unk
           if (!response.ok) {
             if (response.status === 401) notifyUnauthorized(token)
             const body = await response.json().catch(() => ({}))
-            throw new ApiError(body.detail || '分析服务暂时不可用', response.status)
+            throw new ApiError(typeof body.detail === 'string' ? body.detail : '分析服务暂时不可用', response.status)
           }
           if (!response.body) throw new Error('当前环境不支持流式回答')
           const reader = response.body.getReader()
           try {
-            while (true) {
+            while (!settled) {
               const chunk = await reader.read()
               if (chunk.done) break
               push(chunk.value.buffer.slice(chunk.value.byteOffset, chunk.value.byteOffset + chunk.value.byteLength) as ArrayBuffer)
             }
-          } finally { reader.releaseLock() }
+          } finally { if (settled) await reader.cancel().catch(() => {}); reader.releaseLock() }
           finish()
         } catch (error) { fail(error) }
         finally { clearTimeout(timer) }
@@ -119,7 +141,8 @@ export function chatStream(path: string, token: string, data: Record<string, unk
           let detail = '分析服务暂时不可用'
           try {
             const body = typeof response.data === 'string' ? response.data : new StreamDecoder().decode(response.data as ArrayBuffer, true)
-            detail = JSON.parse(body).detail || detail
+            const value = JSON.parse(body).detail
+            if (typeof value === 'string') detail = value
           } catch { /* 非 JSON 错误只展示统一提示。 */ }
           fail(new ApiError(detail, response.statusCode))
           return

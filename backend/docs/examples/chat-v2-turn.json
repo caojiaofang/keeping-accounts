@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "id": "10000000-0000-4000-8000-000000000001",
+  "sequence": 1,
+  "text": "最近七天花了多少？",
+  "answer": "最近七天记录了两笔支出，合计 ¥20.50。",
+  "completeness": "complete",
+  "missing": [],
+  "cards": [
+    {
+      "id": "q1.summary",
+      "type": "summary",
+      "title": "最近七天支出",
+      "filters": {
+        "dateRange": {"start": "2026-10-21", "end": "2026-10-27"},
+        "entryType": "expense"
+      },
+      "generatedAt": 1793062800000,
+      "factIds": ["q1.total", "q1.count"],
+      "rows": [],
+      "footnote": "统计全部匹配的有效账单；没有记录不代表实际没有消费。"
+    }
+  ],
+  "factRefs": [
+    {"id": "q1.total", "value": 2050, "unit": "cents", "label": "支出合计", "sourceCallId": "q1"},
+    {"id": "q1.count", "value": 2, "unit": "count", "label": "支出笔数", "sourceCallId": "q1"}
+  ],
+  "suggestions": [
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "text": "和之前七天比呢？",
+      "sourceTurnId": "10000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "context": {
+    "schemaVersion": 2,
+    "filters": {
+      "dateRange": {"start": "2026-10-21", "end": "2026-10-27"},
+      "entryType": "expense"
+    },
+    "sources": [
+      {"field": "dateRange", "source": "explicit"},
+      {"field": "entryType", "source": "default"}
+    ],
+    "resultRefs": [],
+    "summary": "用户询问最近七天支出，已按全部有效匹配记录汇总。",
+    "summaryThroughSequence": 1
+  },
+  "createdAt": 1793062800000
+}

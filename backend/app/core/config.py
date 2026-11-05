@@ -42,6 +42,20 @@ class Settings(BaseSettings):
     llm_api_mode: Literal["responses", "chat_completions"] = "responses"
     llm_timeout_seconds: float = Field(default=45, ge=1, le=90)
     chat_timeout_seconds: float = Field(default=240, ge=10, le=240)
+    # V2 默认关闭；工具模式显式选择，不因一次请求失败自动切换。
+    chat_v2_enabled: bool = False
+    chat_v2_tool_mode: Literal["structured", "native"] = "structured"
+    chat_v2_max_tool_calls: int = Field(default=6, ge=1, le=20)
+    chat_v2_max_model_requests: int = Field(default=6, ge=1, le=20)
+    chat_v2_max_range_days: int = Field(default=366, ge=1, le=366)
+    chat_v2_cursor_secret: SecretStr | None = Field(default=None, min_length=32)
+    chat_v2_context_max_chars: int = Field(default=16000, ge=4000, le=32000)
+    chat_v2_context_recent_turns: int = Field(default=6, ge=1, le=10)
+    chat_v2_max_input_chars: int = Field(default=220000, ge=20000, le=500000)
+    chat_v2_max_tool_result_chars: int = Field(default=60000, ge=4000, le=200000)
+    chat_v2_max_tool_output_chars: int = Field(default=160000, ge=4000, le=400000)
+    chat_v2_max_response_bytes: int = Field(default=262144, ge=8192, le=2097152)
+    chat_v2_max_output_tokens: int = Field(default=12000, ge=1024, le=32000)
     book_invite_secret: SecretStr | None = Field(default=None, min_length=32)
     admin_username: str = Field(default="admin", min_length=3, max_length=64)
     admin_password_hash: SecretStr | None = None

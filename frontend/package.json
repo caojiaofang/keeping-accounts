@@ -4,7 +4,7 @@
   "private": true,
   "description": "墨记微信记账小程序",
   "scripts": {
-    "check": "npm run type-check && npm run check:network && npm run check:auth && npm run check:chat && npm run check:assistant && npm run check:record && npm run check:calendar && npm run check:shared-books && npm run check:shared-cloud",
+    "check": "npm run type-check && npm run check:network && npm run check:auth && npm run check:chat && npm run check:chat-v2 && npm run check:chat-cards && npm run check:assistant && npm run check:record && npm run check:calendar && npm run check:shared-books && npm run check:shared-cloud",
     "dev:mp-weixin": "node scripts/uni.mjs dev mp-weixin",
     "build:mp-weixin": "node scripts/uni.mjs build mp-weixin",
     "dev:h5": "node scripts/uni.mjs dev h5",
@@ -18,6 +18,8 @@
     "check:auth": "node scripts/check-auth.mjs",
     "check:network": "node scripts/check-network.mjs",
     "check:chat": "node scripts/check-chat.mjs",
+    "check:chat-v2": "node scripts/check-chat-v2.mjs",
+    "check:chat-cards": "node scripts/check-chat-cards.mjs",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

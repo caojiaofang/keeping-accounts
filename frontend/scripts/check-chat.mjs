@@ -265,4 +265,12 @@ await check('H5 使用 fetch 读取真实分片并在完成前展示正文', asy
   } finally { delete globalThis.window; globalThis.fetch = originalFetch }
 })
 
+await check('旧协议离页取消后重新进入相同范围，仍保留未确认消息原编号', async () => {
+  const { chat } = await fresh()
+  streamGate = async () => { throw new Error('done lost') }
+  await chat.send('查询'); const id = chat.pending.id
+  chat.suspend(); await chat.load('2026-10')
+  assert.equal(chat.pending.id, id)
+  streamGate = undefined; assert.equal(await chat.retry(), true); assert.equal(modelCalls, 1)
+})
 console.log(`真实聊天前端检查完成：${passed} 项通过；只使用模拟服务，不发送模型请求。`)

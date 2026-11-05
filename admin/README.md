@@ -2,6 +2,8 @@
 
 独立的 Vue 3 + TypeScript + Vite + Element Plus 管理端，使用真实 FastAPI 接口。正式页面位于 `https://mjzs.zf-yun.cn`，管理 API 前缀为 `/prod-api`，小程序继续使用原有 `/api/v1`。
 
+当前正式页面版本为 [`20261105T075026Z`](../backend/docs/releases/20261105T075026Z.md)，仅更新管理端容器，后端沿用 `20261105T072604Z`。
+
 ## 第一版范围
 
 - 管理员账号密码登录、登录恢复、退出和登录过期处理。
@@ -54,3 +56,17 @@ npm run build
 ```
 
 生产产物输出到 `admin/dist`，由独立 Nginx 容器提供页面。开发服务器不用于正式部署。服务端接口和发布方法见 [Web 管理端部署](../backend/docs/web-admin.md)。
+
+## 账号功能开关
+
+`src/features.ts` 控制账号设置与登录日志的导航和路由。开发服务器默认开启，便于与本地新管理接口联调；正式构建默认关闭，产物不包含这两页。当前生产后端仍使用原管理员实现，不能启用该功能。
+
+只有对应管理接口和数据库迁移完成上线后，才可在构建时显式开启：
+
+```powershell
+$env:VITE_ADMIN_ACCOUNT_FEATURES='true'
+npm run build
+Remove-Item Env:VITE_ADMIN_ACCOUNT_FEATURES
+```
+
+与当前生产后端兼容的构建可显式设置 `$env:VITE_ADMIN_ACCOUNT_FEATURES='false'` 后运行 `npm run build`，完成后移除该环境变量。此开关在构建时决定页面范围，不能替代后端鉴权。

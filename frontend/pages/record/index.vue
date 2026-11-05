@@ -32,15 +32,21 @@ const visibleCategories = computed(() => categories.filter(category => category.
 const activeBook = computed(() => store.books.find(book => book.id === bookId.value) || store.activeBook)
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 
-onLoad((options) => {
+onLoad(async (options) => {
   if (store.accountId && !store.cloudReady) { goBack(); toast('请先在明细页连接云端账本后再记账'); return }
   if (!options?.id) {
     if (options?.date && isCalendarDate(options.date)) date.value = options.date
     if (options?.type === 'income') changeType('income')
     return
   }
+  if (options.fromChat === '1') {
+    saving.value = true
+    try { await store.readEntryReference(options.id, options.bookId || '') }
+    catch (cause) { goBack(); toast(cause instanceof Error ? cause.message : '账单已失效，请重新打开'); return }
+    finally { saving.value = false }
+  }
   const entry = store.entries.find(item => item.id === options.id)
-  if (!entry) { toast('这笔账单不存在'); return }
+  if (!entry) { goBack(); toast('这笔账单不存在'); return }
   if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) { goBack(); toast('你可以查看共同账单，只有本人或创建者可以修改'); return }
   editingId.value = entry.id
   editingVersion.value = entry.version

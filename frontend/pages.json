@@ -35,6 +35,13 @@
       }
     },
     {
+      "path": "pages/entry/index",
+      "style": {
+        "navigationBarTitleText": "账单详情",
+        "disableScroll": true
+      }
+    },
+    {
       "path": "pages/record/index",
       "style": {
         "navigationBarTitleText": "记一笔",

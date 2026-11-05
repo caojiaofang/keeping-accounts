@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QuickRecord from '@/components/assistant/QuickRecord.vue'
 import ExpenseChat from '@/components/assistant/ExpenseChat.vue'
 import { useLedgerStore } from '@/store/ledger'
+import { useChatStore } from '@/store/chat'
 import { localDate } from '@/common/utils/format'
 
 const store = useLedgerStore()
 store.hydrate()
 const mode = ref('record')
 const month = ref(localDate().slice(0, 7))
+const chat = useChatStore()
+onHide(() => chat.suspend())
+onUnload(() => chat.suspend())
+onShow(() => { if (mode.value === 'chat' && store.cloudReady && !chat.ready && !chat.busy) void chat.load(month.value) })
 onLoad(options => {
   mode.value = options?.mode === 'chat' ? 'chat' : 'record'
   if (options?.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(options.month)) month.value = options.month

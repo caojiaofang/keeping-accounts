@@ -141,6 +141,7 @@ class ChatService(AssistantService):
             .where(
                 ChatConversation.id == conversation_id,
                 ChatConversation.owner_id == self.ledger.user_id,
+                func.coalesce(ChatConversation.context["schemaVersion"].as_string(), "1") == "1",
                 self.ledger.access_condition(),
             )
             .execution_options(populate_existing=True)
@@ -176,6 +177,7 @@ class ChatService(AssistantService):
                 ChatConversation.book_id == book_id,
                 ChatConversation.month == month,
                 ChatConversation.version > 0,
+                func.coalesce(ChatConversation.context["schemaVersion"].as_string(), "1") == "1",
             )
             .order_by(ChatConversation.updated_at.desc(), ChatConversation.id)
             .limit(20)

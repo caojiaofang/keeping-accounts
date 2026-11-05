@@ -1,0 +1,1666 @@
+{
+  "date": "2026-11-05",
+  "trusted_today": "2026-10-27",
+  "real_database": true,
+  "real_redis": true,
+  "real_model": true,
+  "requested_model": "gpt-6-luna",
+  "returned_model_in_recovery": [
+    "gpt-6-luna"
+  ],
+  "reasoning_effort": "xhigh",
+  "protocol": "responses",
+  "native_latest_passed": 39,
+  "native_required": 39,
+  "structured_recheck_passed": 3,
+  "first_snapshot": {
+    "samples": 45,
+    "min_ms": 38969,
+    "median_ms": 52453,
+    "p95_ms": 81281,
+    "max_ms": 96297
+  },
+  "whole_round": {
+    "samples": 45,
+    "min_ms": 43969,
+    "median_ms": 60125,
+    "p95_ms": 87219,
+    "max_ms": 102422
+  },
+  "aggregation": "按明确修复后的分批复测取最终样本；不是首轮一次性全通过。负向场景和缓存重放不计入查账耗时。",
+  "phases": [
+    {
+      "name": "canary",
+      "mode": "native",
+      "started_at": "2026-11-05T04:10:41.060006+00:00",
+      "finished_at": "2026-11-05T04:12:20.526664+00:00",
+      "status": "finished",
+      "recorded_trials": 3,
+      "passed": 0,
+      "failures": [
+        {
+          "scenario": "recent_compare",
+          "variant": 1,
+          "error": {
+            "kind": "ServiceError",
+            "status": 502,
+            "detail": "助手未能理解筛选修改，请明确日期或条件后重试"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "empty",
+          "variant": 1,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "回答仅部分完成"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "historical_month",
+          "variant": 1,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "回答仅部分完成"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "name": "diagnostic",
+      "mode": "native",
+      "started_at": "2026-11-05T04:12:18.751738+00:00",
+      "finished_at": "2026-11-05T04:13:34.978064+00:00",
+      "status": "finished",
+      "recorded_trials": 1,
+      "passed": 0,
+      "failures": [
+        {
+          "scenario": "recent_compare",
+          "variant": 1,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "回答仅部分完成"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "name": "expanded-canary",
+      "mode": "native",
+      "started_at": "2026-11-05T04:14:49.582905+00:00",
+      "finished_at": "2026-11-05T04:18:30.925468+00:00",
+      "status": "finished",
+      "recorded_trials": 8,
+      "passed": 6,
+      "failures": [
+        {
+          "scenario": "shared_creator",
+          "variant": 1,
+          "error": {
+            "kind": "ServiceError",
+            "status": 504,
+            "detail": "智能助手响应超时，请稍后重试"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "keyword_add",
+          "variant": 1,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "备注关键词追加或继承不正确"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "name": "scope-fix",
+      "mode": "native",
+      "started_at": "2026-11-05T04:19:26.827864+00:00",
+      "finished_at": "2026-11-05T04:23:01.839171+00:00",
+      "status": "finished",
+      "recorded_trials": 6,
+      "passed": 6,
+      "failures": [],
+      "fixture_sha256": null
+    },
+    {
+      "name": "full-native",
+      "mode": "native",
+      "started_at": "2026-11-05T04:24:08.114438+00:00",
+      "finished_at": null,
+      "status": "interrupted",
+      "recorded_trials": 32,
+      "passed": 28,
+      "failures": [
+        {
+          "scenario": "multi_turn",
+          "variant": 2,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "最终回答金额或笔数不符合场景预期"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "multi_turn",
+          "variant": 1,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "最终回答金额或笔数不符合场景预期"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "disconnect_retry",
+          "variant": 1,
+          "error": {
+            "kind": "TimeoutError",
+            "detail": "评测运行失败；不记录连接信息、SQL 参数或模型原文"
+          },
+          "cleanup": true
+        },
+        {
+          "scenario": "multi_turn",
+          "variant": 3,
+          "error": {
+            "kind": "ServiceError",
+            "status": 504,
+            "detail": "本轮分析超时，请缩小范围后重试"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    },
+    {
+      "name": "multi-fix",
+      "mode": "native",
+      "started_at": "2026-11-05T04:40:04.863774+00:00",
+      "finished_at": null,
+      "status": "interrupted",
+      "recorded_trials": 2,
+      "passed": 0,
+      "failures": [
+        {
+          "scenario": "multi_turn",
+          "variant": 1,
+          "error": {
+            "kind": "InterfaceError",
+            "detail": "开发连接或清理核对失败"
+          },
+          "cleanup": false
+        },
+        {
+          "scenario": "multi_turn",
+          "variant": 2,
+          "error": {
+            "kind": "ServiceError",
+            "status": 504,
+            "detail": "本轮分析超时，请缩小范围后重试"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    },
+    {
+      "name": "creator-on-demand",
+      "mode": "native",
+      "started_at": "2026-11-05T04:36:45.990855+00:00",
+      "finished_at": "2026-11-05T04:40:58.166676+00:00",
+      "status": "finished",
+      "recorded_trials": 3,
+      "passed": 3,
+      "failures": [],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    },
+    {
+      "name": "final-recovery",
+      "mode": "native",
+      "started_at": "2026-11-05T05:04:39.425141+00:00",
+      "finished_at": "2026-11-05T05:21:22.124837+00:00",
+      "status": "passed",
+      "recorded_trials": 12,
+      "passed": 12,
+      "failures": [],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    },
+    {
+      "name": "structured-smoke",
+      "mode": "structured",
+      "started_at": "2026-11-05T05:11:59.269085+00:00",
+      "finished_at": "2026-11-05T05:15:25.750404+00:00",
+      "status": "incomplete_or_failed",
+      "recorded_trials": 3,
+      "passed": 2,
+      "failures": [
+        {
+          "scenario": "recent_compare",
+          "variant": 2,
+          "error": {
+            "kind": "AssertionError",
+            "detail": "回答仅部分完成"
+          },
+          "cleanup": true
+        }
+      ],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    },
+    {
+      "name": "structured-recheck",
+      "mode": "structured",
+      "started_at": "2026-11-05T05:16:29.992163+00:00",
+      "finished_at": "2026-11-05T05:19:53.943449+00:00",
+      "status": "passed",
+      "recorded_trials": 3,
+      "passed": 3,
+      "failures": [],
+      "fixture_sha256": "7c42ddfddbf70e1f25573138918c3596e506df4ddafa34f163d873143dc4a1a5"
+    }
+  ],
+  "native_results": [
+    {
+      "scenario": "recent_compare",
+      "variant": 1,
+      "question": "最近七天支出和之前七天相比呢？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 82015,
+      "first_tool_ms": 42703,
+      "first_snapshot_ms": 62203,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 68609,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 42703,
+          "first_snapshot_ms": 62203,
+          "first_result_ms": 62203
+        },
+        {
+          "elapsed_ms": 1891,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1891
+        }
+      ]
+    },
+    {
+      "scenario": "recent_compare",
+      "variant": 2,
+      "question": "对比一下10月21日至27日和10月14日至20日的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 85844,
+      "first_tool_ms": 46875,
+      "first_snapshot_ms": 66032,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 72407,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 46875,
+          "first_snapshot_ms": 66032,
+          "first_result_ms": 66032
+        },
+        {
+          "elapsed_ms": 1890,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1890
+        }
+      ]
+    },
+    {
+      "scenario": "recent_compare",
+      "variant": 3,
+      "question": "近七天比前一个七天多花了多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 109782,
+      "first_tool_ms": 70156,
+      "first_snapshot_ms": 96297,
+      "model_requests": 4,
+      "tool_calls": 2,
+      "rounds": [
+        {
+          "elapsed_ms": 102422,
+          "model_requests": 4,
+          "tool_calls": 2,
+          "completeness": "complete",
+          "first_tool_ms": 70156,
+          "first_snapshot_ms": 96297,
+          "first_result_ms": 96297
+        },
+        {
+          "elapsed_ms": 1875,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1875
+        }
+      ]
+    },
+    {
+      "scenario": "keyword_add",
+      "variant": 1,
+      "question": "咖啡也算上",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 100781,
+      "first_tool_ms": 65031,
+      "first_snapshot_ms": 81281,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 87219,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 65031,
+          "first_snapshot_ms": 81281,
+          "first_result_ms": 81281
+        },
+        {
+          "elapsed_ms": 1765,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1765
+        }
+      ]
+    },
+    {
+      "scenario": "keyword_add",
+      "variant": 2,
+      "question": "除了奶茶，再加上备注里有咖啡的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 58031,
+      "first_tool_ms": 27782,
+      "first_snapshot_ms": 40282,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 45297,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 27782,
+          "first_snapshot_ms": 40282,
+          "first_result_ms": 40282
+        },
+        {
+          "elapsed_ms": 1375,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1375
+        }
+      ]
+    },
+    {
+      "scenario": "keyword_add",
+      "variant": 3,
+      "question": "奶茶和咖啡只要备注包含其中一个都统计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 57422,
+      "first_tool_ms": 26344,
+      "first_snapshot_ms": 38969,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 43969,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 26344,
+          "first_snapshot_ms": 38969,
+          "first_result_ms": 38969
+        },
+        {
+          "elapsed_ms": 1766,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1766
+        }
+      ]
+    },
+    {
+      "scenario": "exclude_entry",
+      "variant": 1,
+      "question": "把这笔耳机排除，再看最近七天支出合计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 64859,
+      "first_tool_ms": 31532,
+      "first_snapshot_ms": 44641,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 50953,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 31532,
+          "first_snapshot_ms": 44641,
+          "first_result_ms": 44641
+        },
+        {
+          "elapsed_ms": 1688,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1688
+        }
+      ]
+    },
+    {
+      "scenario": "exclude_entry",
+      "variant": 2,
+      "question": "最近七天的支出不要算这笔耳机",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 66234,
+      "first_tool_ms": 33593,
+      "first_snapshot_ms": 46406,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 52609,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 33593,
+          "first_snapshot_ms": 46406,
+          "first_result_ms": 46406
+        },
+        {
+          "elapsed_ms": 1734,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1734
+        }
+      ]
+    },
+    {
+      "scenario": "exclude_entry",
+      "variant": 3,
+      "question": "排除刚才展示的耳机账单后，这七天总共花了多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 65484,
+      "first_tool_ms": 32313,
+      "first_snapshot_ms": 46594,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 51860,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 32313,
+          "first_snapshot_ms": 46594,
+          "first_result_ms": 46594
+        },
+        {
+          "elapsed_ms": 1453,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1453
+        }
+      ]
+    },
+    {
+      "scenario": "shared_creator",
+      "variant": 1,
+      "question": "最近七天小林记录的支出有多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "creator-on-demand",
+      "elapsed_ms": 107594,
+      "first_tool_ms": 70141,
+      "first_snapshot_ms": 86766,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 93469,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 70141,
+          "first_snapshot_ms": 86766,
+          "first_result_ms": 86766
+        },
+        {
+          "elapsed_ms": 1969,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1969
+        }
+      ]
+    },
+    {
+      "scenario": "shared_creator",
+      "variant": 2,
+      "question": "只统计10月21日至27日记账人是小林的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "creator-on-demand",
+      "elapsed_ms": 71625,
+      "first_tool_ms": 43219,
+      "first_snapshot_ms": 57782,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 63969,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 43219,
+          "first_snapshot_ms": 57782,
+          "first_result_ms": 57782
+        },
+        {
+          "elapsed_ms": 1547,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1547
+        }
+      ]
+    },
+    {
+      "scenario": "shared_creator",
+      "variant": 3,
+      "question": "近七天的支出按记账人筛到小林",
+      "status": "passed",
+      "cleanup": true,
+      "source": "creator-on-demand",
+      "elapsed_ms": 71735,
+      "first_tool_ms": 44656,
+      "first_snapshot_ms": 58234,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 64265,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 44656,
+          "first_snapshot_ms": 58234,
+          "first_result_ms": 58234
+        },
+        {
+          "elapsed_ms": 1782,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1782
+        }
+      ]
+    },
+    {
+      "scenario": "empty",
+      "variant": 1,
+      "question": "最近七天备注包含火星的支出有多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 57875,
+      "first_tool_ms": 30547,
+      "first_snapshot_ms": 44953,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 50015,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 30547,
+          "first_snapshot_ms": 44953,
+          "first_result_ms": 44953
+        },
+        {
+          "elapsed_ms": 1625,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1625
+        }
+      ]
+    },
+    {
+      "scenario": "empty",
+      "variant": 2,
+      "question": "查10月21日至27日备注有火星的消费合计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 53125,
+      "first_tool_ms": 27453,
+      "first_snapshot_ms": 40734,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 46109,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 27453,
+          "first_snapshot_ms": 40734,
+          "first_result_ms": 40734
+        },
+        {
+          "elapsed_ms": 1532,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1532
+        }
+      ]
+    },
+    {
+      "scenario": "empty",
+      "variant": 3,
+      "question": "只看近七天备注包含火星的支出，花了多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 52391,
+      "first_tool_ms": 27218,
+      "first_snapshot_ms": 39984,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 44953,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 27218,
+          "first_snapshot_ms": 39984,
+          "first_result_ms": 39984
+        },
+        {
+          "elapsed_ms": 1890,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1890
+        }
+      ]
+    },
+    {
+      "scenario": "zero_base",
+      "variant": 1,
+      "question": "对比10月21日至27日与10月7日至13日的咖啡茶饮分类支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 55171,
+      "first_tool_ms": 28140,
+      "first_snapshot_ms": 42359,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 47750,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28140,
+          "first_snapshot_ms": 42359,
+          "first_result_ms": 42359
+        },
+        {
+          "elapsed_ms": 1547,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1547
+        }
+      ]
+    },
+    {
+      "scenario": "zero_base",
+      "variant": 2,
+      "question": "咖啡茶饮分类在10月21日至27日比10月7日至13日多多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 52765,
+      "first_tool_ms": 27234,
+      "first_snapshot_ms": 40703,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 45719,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 27234,
+          "first_snapshot_ms": 40703,
+          "first_result_ms": 40703
+        },
+        {
+          "elapsed_ms": 1609,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1609
+        }
+      ]
+    },
+    {
+      "scenario": "zero_base",
+      "variant": 3,
+      "question": "本期10月21日至27日，上期10月7日至13日，比较咖啡茶饮分类的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 54719,
+      "first_tool_ms": 28578,
+      "first_snapshot_ms": 42609,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 47625,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28578,
+          "first_snapshot_ms": 42609,
+          "first_result_ms": 42609
+        },
+        {
+          "elapsed_ms": 1562,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1562
+        }
+      ]
+    },
+    {
+      "scenario": "multi_turn",
+      "variant": 1,
+      "question": "最近七天奶茶支出多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 419547,
+      "first_tool_ms": 36312,
+      "first_snapshot_ms": 53250,
+      "model_requests": 18,
+      "tool_calls": 6,
+      "rounds": [
+        {
+          "elapsed_ms": 60515,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 36312,
+          "first_snapshot_ms": 53250,
+          "first_result_ms": 53250
+        },
+        {
+          "elapsed_ms": 2032,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2032
+        },
+        {
+          "elapsed_ms": 59031,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 33968,
+          "first_snapshot_ms": 52453,
+          "first_result_ms": 52453
+        },
+        {
+          "elapsed_ms": 51922,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 30094,
+          "first_snapshot_ms": 45375,
+          "first_result_ms": 45375
+        },
+        {
+          "elapsed_ms": 74828,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 49312,
+          "first_snapshot_ms": 67359,
+          "first_result_ms": 67359
+        },
+        {
+          "elapsed_ms": 73344,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 46125,
+          "first_snapshot_ms": 65797,
+          "first_result_ms": 65797
+        },
+        {
+          "elapsed_ms": 79875,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 49515,
+          "first_snapshot_ms": 70953,
+          "first_result_ms": 70953
+        }
+      ]
+    },
+    {
+      "scenario": "multi_turn",
+      "variant": 2,
+      "question": "统计近七天备注包含奶茶的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 414906,
+      "first_tool_ms": 36953,
+      "first_snapshot_ms": 52891,
+      "model_requests": 18,
+      "tool_calls": 6,
+      "rounds": [
+        {
+          "elapsed_ms": 60125,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 36953,
+          "first_snapshot_ms": 52891,
+          "first_result_ms": 52891
+        },
+        {
+          "elapsed_ms": 1860,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1860
+        },
+        {
+          "elapsed_ms": 53656,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 32015,
+          "first_snapshot_ms": 47187,
+          "first_result_ms": 47187
+        },
+        {
+          "elapsed_ms": 54281,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 31734,
+          "first_snapshot_ms": 47797,
+          "first_result_ms": 47797
+        },
+        {
+          "elapsed_ms": 72578,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 48063,
+          "first_snapshot_ms": 66078,
+          "first_result_ms": 66078
+        },
+        {
+          "elapsed_ms": 81563,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 54688,
+          "first_snapshot_ms": 74406,
+          "first_result_ms": 74406
+        },
+        {
+          "elapsed_ms": 75812,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 47265,
+          "first_snapshot_ms": 68406,
+          "first_result_ms": 68406
+        }
+      ]
+    },
+    {
+      "scenario": "multi_turn",
+      "variant": 3,
+      "question": "查一下10月21日至27日备注里有奶茶的消费合计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 437266,
+      "first_tool_ms": 41265,
+      "first_snapshot_ms": 56812,
+      "model_requests": 18,
+      "tool_calls": 6,
+      "rounds": [
+        {
+          "elapsed_ms": 63359,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 41265,
+          "first_snapshot_ms": 56812,
+          "first_result_ms": 56812
+        },
+        {
+          "elapsed_ms": 1860,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1860
+        },
+        {
+          "elapsed_ms": 69843,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 44937,
+          "first_snapshot_ms": 63296,
+          "first_result_ms": 63296
+        },
+        {
+          "elapsed_ms": 70110,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 33141,
+          "first_snapshot_ms": 63641,
+          "first_result_ms": 63641
+        },
+        {
+          "elapsed_ms": 74828,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 42843,
+          "first_snapshot_ms": 68422,
+          "first_result_ms": 68422
+        },
+        {
+          "elapsed_ms": 71125,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 36906,
+          "first_snapshot_ms": 54578,
+          "first_result_ms": 54578
+        },
+        {
+          "elapsed_ms": 61547,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 35062,
+          "first_snapshot_ms": 54594,
+          "first_result_ms": 54594
+        }
+      ]
+    },
+    {
+      "scenario": "ambiguous",
+      "variant": 1,
+      "question": "把这笔排除",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 54906,
+      "first_tool_ms": null,
+      "first_snapshot_ms": 38140,
+      "model_requests": 2,
+      "tool_calls": 0,
+      "rounds": [
+        {
+          "elapsed_ms": 45344,
+          "model_requests": 2,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": 38140,
+          "first_result_ms": 38140
+        },
+        {
+          "elapsed_ms": 2109,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2109
+        }
+      ]
+    },
+    {
+      "scenario": "ambiguous",
+      "variant": 2,
+      "question": "不要算这一笔",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 53344,
+      "first_tool_ms": null,
+      "first_snapshot_ms": 41047,
+      "model_requests": 2,
+      "tool_calls": 0,
+      "rounds": [
+        {
+          "elapsed_ms": 46031,
+          "model_requests": 2,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": 41047,
+          "first_result_ms": 41047
+        },
+        {
+          "elapsed_ms": 1360,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1360
+        }
+      ]
+    },
+    {
+      "scenario": "ambiguous",
+      "variant": 3,
+      "question": "刚说的这笔先不算",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 40562,
+      "first_tool_ms": null,
+      "first_snapshot_ms": 28750,
+      "model_requests": 2,
+      "tool_calls": 0,
+      "rounds": [
+        {
+          "elapsed_ms": 33750,
+          "model_requests": 2,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": 28750,
+          "first_result_ms": 28750
+        },
+        {
+          "elapsed_ms": 1391,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1391
+        }
+      ]
+    },
+    {
+      "scenario": "permission",
+      "variant": 1,
+      "question": "最近七天花了多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 6859,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 0,
+      "tool_calls": 0,
+      "rounds": []
+    },
+    {
+      "scenario": "permission",
+      "variant": 2,
+      "question": "查看当前账本的支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 6516,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 0,
+      "tool_calls": 0,
+      "rounds": []
+    },
+    {
+      "scenario": "permission",
+      "variant": 3,
+      "question": "继续看这个账本的消费明细",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 6515,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 0,
+      "tool_calls": 0,
+      "rounds": []
+    },
+    {
+      "scenario": "tool_failure",
+      "variant": 1,
+      "question": "最近七天支出合计是多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 33204,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 2,
+      "tool_calls": 1,
+      "rounds": []
+    },
+    {
+      "scenario": "tool_failure",
+      "variant": 2,
+      "question": "统计近七天的总支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 36921,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 2,
+      "tool_calls": 1,
+      "rounds": []
+    },
+    {
+      "scenario": "tool_failure",
+      "variant": 3,
+      "question": "10月21日至27日一共花了多少钱？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "full-native",
+      "elapsed_ms": 36907,
+      "first_tool_ms": null,
+      "first_snapshot_ms": null,
+      "model_requests": 2,
+      "tool_calls": 1,
+      "rounds": []
+    },
+    {
+      "scenario": "disconnect_retry",
+      "variant": 1,
+      "question": "最近七天的总支出是多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 122265,
+      "first_tool_ms": 42969,
+      "first_snapshot_ms": 47140,
+      "model_requests": 5,
+      "tool_calls": 2,
+      "rounds": [
+        {
+          "elapsed_ms": 64515,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 29953,
+          "first_snapshot_ms": 47140,
+          "first_result_ms": 47140
+        },
+        {
+          "elapsed_ms": 2047,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2047
+        }
+      ]
+    },
+    {
+      "scenario": "disconnect_retry",
+      "variant": 2,
+      "question": "合计一下近七天支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 85156,
+      "first_tool_ms": 26718,
+      "first_snapshot_ms": 42047,
+      "model_requests": 5,
+      "tool_calls": 2,
+      "rounds": [
+        {
+          "elapsed_ms": 47484,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 26922,
+          "first_snapshot_ms": 42047,
+          "first_result_ms": 42047
+        },
+        {
+          "elapsed_ms": 2078,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2078
+        }
+      ]
+    },
+    {
+      "scenario": "disconnect_retry",
+      "variant": 3,
+      "question": "10月21日到27日的消费一共多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 91375,
+      "first_tool_ms": 32125,
+      "first_snapshot_ms": 42391,
+      "model_requests": 5,
+      "tool_calls": 2,
+      "rounds": [
+        {
+          "elapsed_ms": 49000,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28141,
+          "first_snapshot_ms": 42391,
+          "first_result_ms": 42391
+        },
+        {
+          "elapsed_ms": 1672,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1672
+        }
+      ]
+    },
+    {
+      "scenario": "legacy_restore",
+      "variant": 1,
+      "question": "继续看刚才范围的支出合计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 70438,
+      "first_tool_ms": 28703,
+      "first_snapshot_ms": 44500,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 50156,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28703,
+          "first_snapshot_ms": 44500,
+          "first_result_ms": 44500
+        },
+        {
+          "elapsed_ms": 2063,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2063
+        }
+      ]
+    },
+    {
+      "scenario": "legacy_restore",
+      "variant": 2,
+      "question": "沿用旧对话的月份和分类，统计支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 69484,
+      "first_tool_ms": 28656,
+      "first_snapshot_ms": 44484,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 50437,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28656,
+          "first_snapshot_ms": 44484,
+          "first_result_ms": 44484
+        },
+        {
+          "elapsed_ms": 1688,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1688
+        }
+      ]
+    },
+    {
+      "scenario": "legacy_restore",
+      "variant": 3,
+      "question": "还是旧对话里的餐饮分类，支出是多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 92844,
+      "first_tool_ms": 30515,
+      "first_snapshot_ms": 59109,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 65593,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 30515,
+          "first_snapshot_ms": 59109,
+          "first_result_ms": 59109
+        },
+        {
+          "elapsed_ms": 5250,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 5250
+        }
+      ]
+    },
+    {
+      "scenario": "historical_month",
+      "variant": 1,
+      "question": "九月份总共花了多少？",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 54813,
+      "first_tool_ms": 26281,
+      "first_snapshot_ms": 40828,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 46531,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 26281,
+          "first_snapshot_ms": 40828,
+          "first_result_ms": 40828
+        },
+        {
+          "elapsed_ms": 1703,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1703
+        }
+      ]
+    },
+    {
+      "scenario": "historical_month",
+      "variant": 2,
+      "question": "统计2026年9月的支出合计",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 61390,
+      "first_tool_ms": 31891,
+      "first_snapshot_ms": 46156,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 52359,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 31891,
+          "first_snapshot_ms": 46156,
+          "first_result_ms": 46156
+        },
+        {
+          "elapsed_ms": 1657,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1657
+        }
+      ]
+    },
+    {
+      "scenario": "historical_month",
+      "variant": 3,
+      "question": "看一下上个月的全部支出",
+      "status": "passed",
+      "cleanup": true,
+      "source": "final-recovery",
+      "elapsed_ms": 56500,
+      "first_tool_ms": 28594,
+      "first_snapshot_ms": 42766,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 48359,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 28594,
+          "first_snapshot_ms": 42766,
+          "first_result_ms": 42766
+        },
+        {
+          "elapsed_ms": 1704,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 1704
+        }
+      ]
+    }
+  ],
+  "structured_results": [
+    {
+      "scenario": "recent_compare",
+      "variant": 1,
+      "status": "passed",
+      "cleanup": true,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 61047,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 35328,
+          "first_snapshot_ms": 54125,
+          "first_result_ms": 54125
+        },
+        {
+          "elapsed_ms": 2406,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2406
+        }
+      ]
+    },
+    {
+      "scenario": "recent_compare",
+      "variant": 2,
+      "status": "passed",
+      "cleanup": true,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 52187,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 30547,
+          "first_snapshot_ms": 46812,
+          "first_result_ms": 46812
+        },
+        {
+          "elapsed_ms": 2063,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 2063
+        }
+      ]
+    },
+    {
+      "scenario": "recent_compare",
+      "variant": 3,
+      "status": "passed",
+      "cleanup": true,
+      "model_requests": 3,
+      "tool_calls": 1,
+      "rounds": [
+        {
+          "elapsed_ms": 53875,
+          "model_requests": 3,
+          "tool_calls": 1,
+          "completeness": "complete",
+          "first_tool_ms": 32859,
+          "first_snapshot_ms": 48500,
+          "first_result_ms": 48500
+        },
+        {
+          "elapsed_ms": 5484,
+          "model_requests": 0,
+          "tool_calls": 0,
+          "completeness": "complete",
+          "first_tool_ms": null,
+          "first_snapshot_ms": null,
+          "first_result_ms": 5484
+        }
+      ]
+    }
+  ]
+}

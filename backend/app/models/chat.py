@@ -1,4 +1,4 @@
-"""保存已完成的问答；同一消息 ID 防重，不持久化失败的半轮对话。"""
+"""保存完整或明确标注的部分问答；同一消息 ID 防重，失败或断连不写入半轮。"""
 
 from datetime import datetime
 from uuid import UUID

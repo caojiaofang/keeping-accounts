@@ -140,6 +140,10 @@ CHECK_CONNECTIONS_ON_STARTUP=true
 
 ## 开发检查
 
+「聊聊花费」V2 的[接口与模型接入契约](docs/chat-assistant-v2.md)已完成第 01 步：可执行数据结构、默认零网络的模型探测和离线检查；V2 业务路由尚未启用。在 `backend` 目录运行 `.\.venv\Scripts\python.exe -m app.integrations.llm_probe` 查看探测入口，追加 `--live` 才会发送真实模型请求。
+
+2026-10-28 第 02 步已实现[日期与组合筛选](docs/chat-v2-filters.md)，支持自然周期辅助解析、任意日期、比较范围及组合条件，已以 `20261028T031201Z` [发布](docs/releases/20261028T031201Z.md)。第 03—07 步已完成[只读工具与事实](docs/chat-v2-tools.md)、[可修正上下文](docs/chat-v2-context.md)、[有限循环](docs/chat-v2-loop.md)、[可信回答与追问](docs/chat-v2-answer.md)及[V2 会话、历史与 SSE](docs/chat-v2-api.md)，离线及真实开发 PostgreSQL/Redis 验证通过，业务模型请求为模拟。2026-11-05 第 08 步已完成[前端状态与流接入](../frontend/docs/chat-v2-state.md)，包括能力协商、权威范围、部分结果、重试及旧版只读续聊。`CHAT_V2_ENABLED=false` 仍默认关闭，分页前需配置独立的 `CHAT_V2_CURSOR_SECRET`；第 09 步已完成[专用结果卡、账单入口及阅读交互](../frontend/docs/chat-v2-cards.md)的开发和本地验收，复用现有鉴权账本快照重查记录，不新增后端接口。第 10 步已完成[场景评测与真实联调](docs/chat-v2-evaluation.md)，原生分批最终覆盖 39/39 表达、兼容冒烟复测 3/3，三组六轮/断连/旧历史及权限检查通过，失败和修复记录保留。统一检查后端 481 passed、14 skipped；完整设备验收仍待补。服务端已于 2026-11-05 按用户指令[发布至 `20261105T072604Z`](docs/releases/20261105T072604Z.md)，以生产旧版基底合入 16 个运行模块，实际组合检查 300 passed；V2 开关、环境及数据库版本保持原状，小程序未上传。下一步为第 11 步完整验收及发布准备。
+
 前后端统一入口：在仓库根目录执行 `.\scripts\check.ps1`，可一并完成前端检查及以下后端检查；追加 `-Build` 会验证微信小程序与 H5 构建。任一检查失败立即停止并返回非零退出码。统一入口临时关闭真实集成及模型测试开关，结束后恢复原值；前置依赖说明见[项目说明](../README.md#开发与检查)。
 
 从 `backend` 目录运行：
