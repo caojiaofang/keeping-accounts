@@ -1,8 +1,8 @@
 # z11 正式部署
 
-当前正式后端与后台 Web 镜像均为 [`20261106T121956Z`](releases/20261106T121956Z.md)，2026-11-06 北京时间 20:23 完成发布。正式库由 `0006_budget` 升至 `0007_nickname`，账号昵称保存接口与 Web 昵称展示已上线。管理员密码保留，账号设置与登录日志继续启用；小程序本次未上传或发布。
+当前正式后端为 [`20261106T124007Z`](releases/20261106T124007Z.md)，2026-11-06 北京时间 20:42 完成家庭账本账号昵称逻辑发布。Web 保持 `20261106T121956Z`，容器未重建。正式库仍为 `0007_nickname`，本次无需迁移；管理员密码、账号设置与登录日志均保留。小程序由用户自行发布。
 
-既有 V2 enabled／native 配置保留，正式环境文件与公共 Nginx 配置逐字节未变。当前 `current` 指向 `/opt/keeping-accounts/releases/20261106T121956Z`，目录根部 `.env` 的 `IMAGE_TAG` 与 `ADMIN_IMAGE_TAG` 均固定该版本。管理端以 `VITE_ADMIN_ACCOUNT_FEATURES=true` 构建；后续打包需保留该开关。备份、验收与回退见[本次发布记录](releases/20261106T121956Z.md)。
+当前 `current` 指向 `/opt/keeping-accounts/releases/20261106T124007Z`，根部 `.env` 固定 `IMAGE_TAG=20261106T124007Z`、`ADMIN_IMAGE_TAG=20261106T121956Z`。既有 V2 enabled／native 配置保留，正式环境与公共 Nginx 配置逐字节未变。沿用的 Web 构建包含 `VITE_ADMIN_ACCOUNT_FEATURES=true`，后续重新构建发布时需保留该开关。备份、验收与回退见[本次发布记录](releases/20261106T124007Z.md)，前次双服务更新见[昵称功能发布](releases/20261106T121956Z.md)。
 
 公网地址为 `https://mjzs.zf-yun.cn`，健康检查为 `/api/v1/health`，小程序接口前缀为 `/api/v1`。Web 管理端上线后根路径提供管理页面，管理接口前缀为 `/prod-api`，前后端分别运行于独立容器。双服务发布及新目录结构见 [Web 管理端部署](web-admin.md)，以下保留原后端单服务部署说明供旧版本运维与回退参考。
 

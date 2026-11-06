@@ -12,7 +12,6 @@ from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.models.chat import ChatConversation, ChatTurn
 from app.models.ledger import Book, LedgerEntry
-from app.models.shared import BookMember
 from app.schemas.chat_v2 import (
     AnswerPreviewV2,
     ChatContextV2,
@@ -208,14 +207,7 @@ class ContextStoreV2:
             book = await self.ledger.require_book(conversation.book_id)
             members = []
             if book.kind == "shared":
-                members = list(
-                    await self.ledger.session.scalars(
-                        select(BookMember)
-                        .where(BookMember.book_id == book.id)
-                        .order_by(BookMember.user_id)
-                        .limit(51)
-                    )
-                )
+                members = await self.ledger.member_directory(book.id, limit=51)
             all_creators = bool(re.search(r"记账人|成员|谁|每个人|各人|所有人|大家", question))
             self_creator = bool(
                 re.search(

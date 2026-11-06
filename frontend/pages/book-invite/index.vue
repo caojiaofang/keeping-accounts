@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
@@ -21,7 +21,7 @@ const loading = ref(false)
 const error = ref('')
 const now = ref(Date.now())
 const preview = ref<InvitationPreview>()
-const name = ref('家庭成员')
+const name = computed(() => auth.user?.nickname || '墨记用户')
 const isExample = computed(() => token.value === FAMILY_INVITATION)
 const invitation = computed(() => store.invitations.find(item => item.token === token.value))
 const book = computed(() => isExample.value ? store.books.find(item => item.id === 'shared-joined-example') : store.books.find(item => item.id === (preview.value?.bookId || invitation.value?.bookId)))
@@ -44,11 +44,7 @@ async function load() {
     if (version === revision) { preview.value = undefined; error.value = cause instanceof Error ? cause.message : '邀请读取失败，请重试' }
   } finally { if (version === revision) loading.value = false }
 }
-function loadName() {
-  try { name.value = String(uni.getStorageSync(store.preferenceKey('nickname')) || '家庭成员').slice(0, 12) } catch { name.value = '家庭成员' }
-}
-watch(() => store.accountId, loadName)
-onLoad(options => { token.value = options?.token || ''; rememberInvitation(token.value); loadName() })
+onLoad(options => { token.value = options?.token || ''; rememberInvitation(token.value) })
 onShow(async () => {
   void load()
   await auth.bootstrap()
@@ -65,7 +61,6 @@ async function accept() {
       uni.navigateTo({ url: `/pages/login/index?redirect=${encodeURIComponent(invitationPath(token.value))}` })
       return
     }
-    if (!name.value.trim()) return toast('请输入你在这个账本中的称呼')
     joining.value = true
     try {
       // 加入必须由本次点击明确确认；登录返回或打开分享页都不自动加入。
@@ -93,7 +88,7 @@ function backToBooks() { forgetInvitation(); uni.redirectTo({ url: '/pages/share
       <text class="invitation-title">一起记好小家的日常</text>
       <view class="invited-book"><AppIcon name="home" :size="57" /><text>{{ title }}</text><text class="preview-member-count">多人账本 · 确认加入后才可查看收支</text></view>
       <view class="invite-benefit"><AppIcon name="check" :size="26" /><text>共同查看收支、统计和日历</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>每一笔保留记账人和修改记录</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>成员维护自己的账单，创建者管理账本</text></view>
-      <view v-if="store.accountId && isCloudInvitation(token) && !joined" class="join-name"><text>你在这个账本中的称呼</text><input v-model="name" :maxlength="12" placeholder="例如：小林、爸爸" /></view>
+      <view v-if="store.accountId && isCloudInvitation(token) && !joined" class="join-name"><text>以「{{ name }}」加入账本</text><text class="join-name-hint">成员显示账号昵称，可在「我的」修改</text></view>
       <text class="invite-expiry">{{ isExample ? '示例邀请，接受后会在本机创建演示账本。' : preview ? `邀请有效至 ${localDate(new Date(preview.expiresAt))}` : '' }}</text>
       <button class="primary-button accept-invite" :disabled="joining || auth.busy || (isCloudInvitation(token) && store.syncing)" :loading="joining" @tap="accept">{{ joined ? '已在账本中，查看账本' : isExample ? '接受示例邀请' : auth.isLoggedIn ? '确认加入这个账本' : '微信登录后加入' }}</button>
       <button class="decline-invite" @tap="backToBooks">{{ joined ? '返回多人账本' : '暂不加入，返回多人账本' }}</button>
@@ -122,5 +117,5 @@ function backToBooks() { forgetInvitation(); uni.redirectTo({ url: '/pages/share
 
 <style scoped lang="scss">
 .join-name { margin: 28rpx 0; font-size: 25rpx; color: #718b7a; }
-.join-name input { margin-top: 15rpx; padding: 20rpx; border: 1rpx solid #dce6de; border-radius: 16rpx; color: #285e4e; }
+.join-name-hint { display: block; margin-top: 12rpx; font-size: 22rpx; color: #8a9d90; }
 </style>

@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.models.ledger import Book, LedgerEntry
 from app.models.shared import BookMember
+from app.models.user import User
 from app.schemas.chat_v2 import (
     CompareArgs,
     DateRange,
@@ -116,13 +117,18 @@ class Bundle:
 
 def grouped_statement(prepared, group_by):
     member = aliased(BookMember)
+    account = aliased(User)
     group_key = {
         "category": LedgerEntry.category_id,
         "date": cast(LedgerEntry.date, String),
         "account": LedgerEntry.account,
         "creator": cast(LedgerEntry.created_by, String),
     }.get(group_by, literal("all"))
-    group_name = member.name if group_by == "creator" else literal("")
+    group_name = (
+        func.coalesce(func.nullif(account.nickname, ""), member.name)
+        if group_by == "creator"
+        else literal("")
+    )
     statement = (
         select(
             LedgerEntry.type.label("entry_type"),
@@ -137,7 +143,7 @@ def grouped_statement(prepared, group_by):
     if group_by == "creator":
         statement = statement.outerjoin(
             member, (member.book_id == Book.id) & (member.user_id == LedgerEntry.created_by)
-        )
+        ).outerjoin(account, account.id == member.user_id)
     return statement.where(*prepared.conditions).group_by(LedgerEntry.type, group_key, group_name)
 
 

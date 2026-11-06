@@ -15,6 +15,7 @@ from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.models.ledger import Book
 from app.models.shared import BookActivity, BookInvitation, BookMember
+from app.models.user import User
 from app.schemas.shared import (
     ActivityResponse,
     CreateInvitation,
@@ -166,10 +167,11 @@ class SharedBookService:
     async def preview(self, token):
         invitation, book = await self.valid_invitation(token)
         inviter = await self.member(book.id, book.owner_id)
+        nickname = await self.session.scalar(select(User.nickname).where(User.id == book.owner_id))
         return InvitationPreview(
             book_id=book.id,
             book_name=book.name,
-            inviter_name=inviter.name if inviter else "创建者",
+            inviter_name=nickname or (inviter.name if inviter else "墨记用户"),
             expires_at=int(invitation.expires_at.timestamp() * 1000),
         )
 

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
 from app.api.auth_deps import get_session_store, get_wechat_client
-from app.api.deps import get_db
+from app.api.deps import get_db, get_redis
 from app.core.config import BACKEND_DIR, Settings
 from app.main import create_app
 from app.services.admin import AdminService
@@ -63,7 +63,11 @@ async def roundtrip():
 
                 await connection.run_sync(migrate, "0006_budget")
                 settings = Settings(
-                    _env_file=None, app_env="test", database_url=None, redis_url=None
+                    _env_file=None,
+                    app_env="test",
+                    database_url=None,
+                    redis_url=None,
+                    book_invite_secret="test-invitation-secret-" * 3,
                 )
                 users = [uuid4() for _ in range(3)]
                 for index, user_id in enumerate(users):
@@ -102,6 +106,9 @@ async def roundtrip():
 
                 app = create_app(settings)
                 app.dependency_overrides[get_db] = database
+                app.dependency_overrides[get_redis] = lambda: SimpleNamespace(
+                    eval=AsyncMock(return_value=1)
+                )
                 app.dependency_overrides[get_session_store] = lambda: SimpleNamespace(
                     resolve=resolve, issue=issue, check_login_rate=AsyncMock()
                 )
@@ -148,6 +155,8 @@ async def roundtrip():
                     assert relogin.json()["user"]["nickname"] == saved.json()["nickname"]
                     assert relogin.json()["user"]["id"] == str(users[0])
 
+                    await check_shared_nicknames(client, users, saved.json()["nickname"])
+
                 async with AsyncSession(
                     bind=connection, join_transaction_mode="create_savepoint"
                 ) as session:
@@ -156,7 +165,7 @@ async def roundtrip():
                     listing = await admin.users(str(users[0]), 1, 20)
                     assert detail.nickname == saved.json()["nickname"]
                     assert listing.items[0].nickname == detail.nickname
-                    assert (await admin.user(users[1])).nickname is None
+                    assert (await admin.user(users[1])).nickname == "家人账号昵称"
 
                 await connection.run_sync(migrate, "0006_budget", downgrade=True)
                 assert await connection.scalar(text("SELECT count(*) FROM users")) == 3
@@ -171,3 +180,51 @@ async def roundtrip():
             )
     finally:
         await engine.dispose()
+
+
+async def check_shared_nicknames(client, users, owner_name):
+    """真实成员列表、邀请、改名和转让都使用账号昵称，角色独立保留。"""
+    owner = {"Authorization": "Bearer " + "a" * 43}
+    member = {"Authorization": "Bearer " + "b" * 43}
+    book_id = str(uuid4())
+    created = await client.post(
+        "/api/v1/books",
+        headers=owner,
+        json={"id": book_id, "name": "家庭昵称验证", "kind": "shared", "memberName": "创建者"},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["members"][0]["name"] == owner_name
+    assert created.json()["members"][0]["role"] == "owner"
+    invitation = await client.post(
+        f"/api/v1/books/{book_id}/invitations", headers=owner, json={"id": str(uuid4())}
+    )
+    assert invitation.status_code == 200, invitation.text
+    token = invitation.json()["token"]
+    preview = await client.post("/api/v1/book-invitations/preview", json={"token": token})
+    assert preview.json()["inviterName"] == owner_name
+    joined = await client.post(
+        "/api/v1/book-invitations/accept",
+        headers=member,
+        json={"token": token, "name": "原账本称呼"},
+    )
+    assert joined.status_code == 200, joined.text
+    assert (
+        next(m for m in joined.json()["members"] if m["userId"] == str(users[1]))["name"]
+        == "原账本称呼"
+    )
+    changed = await client.put("/api/v1/auth/me", headers=member, json={"nickname": "家人账号昵称"})
+    assert changed.status_code == 200
+    members = await client.get(f"/api/v1/books/{book_id}/members", headers=owner)
+    names = {m["userId"]: m for m in members.json()}
+    assert names[str(users[0])]["name"] == owner_name
+    assert names[str(users[1])]["name"] == "家人账号昵称"
+    assert names[str(users[0])]["role"] == "owner"
+    book = await client.get(f"/api/v1/books/{book_id}", headers=owner)
+    transferred = await client.post(
+        f"/api/v1/books/{book_id}/transfer",
+        headers=owner,
+        json={"userId": str(users[1]), "version": book.json()["version"]},
+    )
+    assert transferred.status_code == 200, transferred.text
+    new_owner = next(m for m in transferred.json()["members"] if m["role"] == "owner")
+    assert new_owner["userId"] == str(users[1]) and new_owner["name"] == "家人账号昵称"

@@ -17,6 +17,7 @@ from app.core.errors import ServiceError
 from app.models.chat import ChatConversation, ChatTurn
 from app.models.ledger import LedgerEntry
 from app.models.shared import BookMember
+from app.models.user import User
 from app.schemas.chat_v2 import (
     AnswerPreviewV2,
     ContextPatch,
@@ -58,6 +59,22 @@ def context_data(data):
     data.settings = Settings(_env_file=None)
     data.store = ContextStoreV2(data.ledger, data.settings, today=date(2026, 10, 27))
     return data
+
+
+def test_model_scope_follows_account_nickname_changes(context_data):
+    async def exercise():
+        data = context_data
+        state = await create(data)
+        data.session.execute(
+            update(User).where(User.id == data.users["owner"]).values(nickname="账号新昵称")
+        )
+        data.session.commit()
+        scope = await data.store.model_scope(state.conversation_id, question="账号新昵称记了多少")
+        assert scope["creatorDirectory"] == [
+            {"userId": str(data.users["owner"]), "name": "账号新昵称", "status": "active"}
+        ]
+
+    asyncio.run(exercise())
 
 
 async def create(data, book="shared"):

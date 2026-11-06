@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError
 from app.models.ledger import Book, LedgerEntry
 from app.models.shared import BookActivity, BookMember
+from app.models.user import User
 from app.schemas.ledger import (
     BookResponse,
     CreateBook,
@@ -99,19 +100,27 @@ class LedgerService:
         if book.owner_id != self.user_id:
             raise ServiceError(403, "只有账本创建者可以执行此操作")
 
+    async def member_directory(self, book_id: UUID, *, limit: int | None = None):
+        # 昵称在读取时关联账号，避免改名后各账本仍保留旧称呼。
+        statement = (
+            select(
+                BookMember.user_id,
+                func.coalesce(func.nullif(User.nickname, ""), BookMember.name).label("name"),
+                BookMember.role,
+                BookMember.status,
+            )
+            .outerjoin(User, User.id == BookMember.user_id)
+            .where(BookMember.book_id == book_id)
+            .order_by(BookMember.joined_at, BookMember.user_id)
+        )
+        if limit is not None:
+            statement = statement.limit(limit)
+        return (await self.session.execute(statement)).mappings().all()
+
     async def describe(self, book: Book) -> BookResponse:
         members = []
         if book.kind == "shared":
-            rows = await self.session.scalars(
-                select(BookMember)
-                .where(BookMember.book_id == book.id)
-                .order_by(BookMember.joined_at, BookMember.user_id)
-                .execution_options(populate_existing=True)
-            )
-            members = [
-                MemberResponse(user_id=row.user_id, name=row.name, role=row.role, status=row.status)
-                for row in rows
-            ]
+            members = [MemberResponse(**row) for row in await self.member_directory(book.id)]
         return BookResponse(
             **{
                 key: getattr(book, key)
