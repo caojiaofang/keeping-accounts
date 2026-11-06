@@ -113,7 +113,8 @@ function openEntry(message: Message, card: ResultCardV2, entryId: string) {
   if (message.id === 'stream-preview' || !card.rows.some(row => row.entryId === entryId)) return
   uni.navigateTo({ url: `/pages/entry/index?id=${encodeURIComponent(entryId)}&bookId=${encodeURIComponent(store.activeBookId)}` })
 }
-watch(() => [chat.preview, chat.preview?.answer, chat.turns.length, chat.progress], () => { void scrollToBottom() })
+// 只有回答内容变化才跟随到底部，等待阶段的状态文字不重复触发定位。
+watch(() => [chat.preview, chat.preview?.answer, chat.turns.length], () => { void scrollToBottom() })
 async function ask(text: string, topic?: AnalysisTopic, categoryId?: string) {
   if (store.accountId) {
     if (busy.value || !text.trim()) return
@@ -170,6 +171,7 @@ async function continueLegacy() { if (await chat.startFromLegacy()) { historyOpe
   <view class="chat-panel">
     <view class="chat-toolbar"><text>{{ scopeLabel }}</text><button v-if="store.accountId" class="new-conversation" :disabled="busy" @tap="openHistory">历史</button><button class="new-conversation" :disabled="busy" @tap="reset"><AppIcon name="plus" :size="23" />新对话</button></view>
     <view v-if="chat.legacyReadonly" class="chat-status">旧版对话只读，保留原始回答和统计快照。<button class="older-turns" :disabled="busy" @tap="continueLegacy">基于此对话开始新版续聊</button></view>
+    <view class="conversation-area">
     <scroll-view scroll-y class="conversation-scroll" :scroll-into-view="anchor" @scroll="onScroll">
       <view class="conversation-body"><button v-if="store.accountId && chat.hasMore" class="older-turns" :disabled="busy" @tap="loadEarlier">查看更早的对话</button>
         <view v-if="!messages.length && !busy" class="chat-welcome"><view class="assistant-mark"><AppIcon name="leaf" :size="53" light /></view><text class="welcome-title">钱花在哪，一起聊清楚。</text><text class="welcome-copy">从一笔早餐，到一个月的生活，
@@ -195,6 +197,7 @@ async function continueLegacy() { if (await chat.startFromLegacy()) { historyOpe
       </view>
     </scroll-view>
     <view v-if="!following && messages.length" class="latest-bar"><button @tap="scrollToBottom(true)">回到最新内容</button></view>
+    </view>
     <view class="chat-composer"><view class="compose-box"><view class="chat-input-wrap"><textarea v-model="input" class="chat-input" :placeholder="store.accountId ? '问问这月的收支，也可以接着追问' : '问问这月的花费，或点选示例问题'" :disabled="blocked" :maxlength="200" auto-height :disable-default-padding="true" :adjust-position="true" :cursor-spacing="24" confirm-type="send" @keyboardheightchange="measureViewport" @linechange="measureViewport" @confirm="ask(input)" /></view><button class="send-message" :disabled="blocked || !input.trim()" aria-label="发送消息" @tap="ask(input)"><AppIcon name="arrow" :size="31" light /></button></view><text class="composer-note">基于已记录的账单分析，实际收支以你的核对为准</text></view>
     <view v-if="historyOpen" class="sheet-mask" @tap="historyOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">最近的分析对话</text><button class="icon-button" aria-label="关闭历史对话" @tap="historyOpen = false"><AppIcon name="close" :size="30" /></button></view><button v-if="chat.protocol === 'v2'" class="older-turns" :disabled="busy" @tap="switchHistory">{{ legacyTab ? '返回新版对话' : '查看入口月份的旧版对话' }}</button><scroll-view scroll-y class="history-list"><button v-for="item in historyItems" :key="item.id" class="history-item" :disabled="busy" @tap="chooseHistory(item.id)"><text>{{ item.title }}</text><text>{{ monthLabel('initialMonth' in item ? item.initialMonth : item.month) }}</text></button><text v-if="!historyItems.length" class="chat-status">当前范围还没有已保存的对话</text></scroll-view><text class="welcome-note">{{ chat.protocol === 'v2' && !legacyTab ? '展示当前账本最近二十个对话，包含不同入口月份' : '展示当前账本及入口月份最近二十个对话' }}</text></view></view>
   </view>
@@ -215,8 +218,10 @@ async function continueLegacy() { if (await chat.startFromLegacy()) { historyOpe
 .chat-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 0 36rpx; padding: 8rpx 0 16rpx; border-bottom: 1rpx solid #e4ece6; font-size: 22rpx; color: #8b9d90; }
 .new-conversation { display: flex; align-items: center; gap: 5rpx; font-size: 22rpx; color: #668671; padding: 7rpx 0 7rpx 18rpx; }
 .new-conversation[disabled] { background: transparent; color: #a6b2a9; }
-.conversation-scroll { flex: 1; height: 0; min-height: 0; }
-.latest-bar { flex-shrink: 0; padding: 10rpx 36rpx; background: #edf3ee; }
+/* 返回按钮浮在列表内，不挤占高度，避免滚动事件与跟随状态反复互相触发。 */
+.conversation-area { position: relative; flex: 1; height: 0; min-height: 0; overflow: hidden; }
+.conversation-scroll { height: 100%; min-height: 0; }
+.latest-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 10rpx 36rpx; background: #edf3ee; }
 .latest-bar button { display: block; color: #285e4e; font-size: 24rpx; padding: 10rpx; }
 .conversation-body { padding: 25rpx 36rpx 0; }
 .chat-welcome { padding: 14rpx 0 28rpx; }
