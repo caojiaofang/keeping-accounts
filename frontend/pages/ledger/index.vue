@@ -9,6 +9,7 @@ import MonthPicker from '@/components/MonthPicker.vue'
 import BookSwitcher from '@/components/BookSwitcher.vue'
 import EntryList from '@/components/EntryList.vue'
 import PromptSheet from '@/components/PromptSheet.vue'
+import FamilyBudgetCard from '@/components/FamilyBudgetCard.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
@@ -37,8 +38,6 @@ const filteredEntries = computed(() => store.monthEntries.filter(entry => {
   const matchesKeyword = `${entry.note}${entry.account}${store.categoryOf(entry.categoryId).name}`.includes(keyword.value.trim())
   return matchesType && matchesCategory && matchesKeyword
 }))
-const budgetPercent = computed(() => store.activeBook.budget > 0 ? Math.round(store.expense / store.activeBook.budget * 100) : 0)
-const remaining = computed(() => store.activeBook.budget - store.expense)
 function chooseCategory() {
   categoryOpen.value = true
 }
@@ -77,11 +76,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
       </view>
     </view>
 
-    <button class="budget-card" @tap="openBudget">
-      <view class="budget-symbol"><AppIcon name="wallet" :size="35" /></view>
-      <view class="budget-info"><view class="between"><text>月预算</text><text class="budget-remaining">{{ remaining >= 0 ? '还可支出' : '已超预算' }} <text class="number">¥{{ money(remaining) }}</text></text></view><view class="progress-track"><view class="progress-fill" :class="{ exceeded: remaining < 0 }" :style="{ width: `${Math.min(budgetPercent, 100)}%` }" /></view></view>
-      <AppIcon name="chevron" :size="24" />
-    </button>
+    <FamilyBudgetCard @legacy="openBudget" />
 
     <view class="assistant-entries"><button class="assistant-entry" @tap="openAssistant('record')"><view class="assistant-entry-icon"><AppIcon name="edit" :size="34" /></view><view><text class="assistant-entry-title">一句话记账</text><text class="assistant-entry-copy">聊两句，发张图，轻松记好</text></view><AppIcon name="chevron" :size="23" /></button><view class="assistant-entry-divider" /><button class="assistant-entry" @tap="openAssistant('chat')"><view class="assistant-entry-icon"><AppIcon name="chart" :size="34" /></view><view><text class="assistant-entry-title">聊聊花费</text><text class="assistant-entry-copy">看看钱都花在哪儿了</text></view><AppIcon name="chevron" :size="23" /></button></view>
     <view class="section-head ledger-heading"><view class="row"><text class="section-title">收支明细</text><text class="entry-count">{{ filteredEntries.length }} 笔</text></view><view class="tools"><button class="calendar-shortcut" aria-label="消费日历" @tap="openCalendar"><AppIcon name="calendar" :size="30" /><text>日历</text></button><button class="tool-button" aria-label="搜索账单" @tap="searching = !searching; keyword = ''"><AppIcon name="search" :size="35" /></button><button class="tool-button" aria-label="筛选分类" @tap="chooseCategory"><AppIcon name="filter" :size="37" /><view v-if="categoryFilter" class="filter-dot" /></button></view></view>

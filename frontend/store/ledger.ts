@@ -1,4 +1,5 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useBudgetStore } from '@/store/budget'
 import { defineStore } from 'pinia'
 import { categories } from '@/common/data/categories'
 import { createDemoEntries, initialBooks } from '@/common/mock/ledger'
@@ -49,7 +50,11 @@ export const useLedgerStore = defineStore('ledger', () => {
 
   function switchAccount(userId: string | null, token = ''): void {
     cloudToken = token
-    if (initialized && accountId.value === userId) return
+    if (initialized && accountId.value === userId) {
+      useBudgetStore().connect({ accountId: userId, token, book: activeBook.value, month: selectedMonth.value, ready: cloudReady.value }, () => entries.value)
+      return
+    }
+    useBudgetStore().invalidate()
     revision++
     syncTask = undefined
     syncing.value = false
@@ -153,6 +158,7 @@ export const useLedgerStore = defineStore('ledger', () => {
       const result = await action(token)
       if (version !== revision) return false
       apply(result)
+      useBudgetStore().ledgerChanged((result as { budgetNotice?: string } | undefined)?.budgetNotice || '')
       syncError.value = ''
       persist()
       return true
@@ -257,10 +263,11 @@ export const useLedgerStore = defineStore('ledger', () => {
       const index = entries.value.findIndex(item => item.id === id)
       if (index < 0) { toast('这笔账单不存在'); return false }
       if (!canEditEntry(books.value.find(book => book.id === entries.value[index].bookId), entries.value[index])) { toast('只能修改自己记录的账单'); return false }
+      if (entry.version !== undefined && entry.version !== (entries.value[index].version || 1)) { toast('账单已变化，请重新读取后修改'); return false }
       if (entries.value[index].bookId !== entry.bookId && (targetBook?.kind === 'shared' || books.value.find(book => book.id === entries.value[index].bookId)?.kind === 'shared')) { toast('多人账本的账单不能转移到其他账本'); return false }
-      entries.value[index] = { ...entries.value[index], ...entry, createdBy: entries.value[index].createdBy }
+      entries.value[index] = { ...entries.value[index], ...entry, version: (entries.value[index].version || 1) + 1, createdBy: entries.value[index].createdBy }
     } else {
-      entries.value.push({ ...entry, id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, createdAt: Date.now(), createdBy: DEMO_USER_ID })
+      entries.value.push({ ...entry, id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, version: 1, createdAt: Date.now(), createdBy: DEMO_USER_ID })
     }
     selectedMonth.value = entry.date.slice(0, 7)
     activeBookId.value = entry.bookId
@@ -425,6 +432,12 @@ export const useLedgerStore = defineStore('ledger', () => {
     selectedMonth.value = localDate().slice(0, 7)
     persist()
   }
+
+  // 预算独立管理状态，跟随现有账号、账本和月份；令牌不写入预算缓存。
+  watch(() => [accountId.value, activeBookId.value, selectedMonth.value, cloudReady.value, JSON.stringify(books.value)], () => {
+    useBudgetStore().connect({ accountId: accountId.value, token: cloudToken, book: activeBook.value, month: selectedMonth.value, ready: cloudReady.value }, () => entries.value)
+  }, { immediate: true, flush: 'sync' })
+  watch(entries, () => useBudgetStore().ledgerChanged(), { deep: true, flush: 'sync' })
 
   function categoryOf(id: string) {
     return categories.find(category => category.id === id) || categories[11]

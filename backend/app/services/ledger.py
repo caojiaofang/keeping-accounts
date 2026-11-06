@@ -296,6 +296,8 @@ class LedgerService:
         await self.session.refresh(entry)
         if entry.book_id != original_book_id:
             raise ServiceError(409, "账单已被转移，请重新读取后重试")
+        if entry.is_deleted and not include_deleted:
+            raise ServiceError(404, "账单不存在或无权访问")
         book = await self.require_book(entry.book_id, write=write)
         if write and entry.created_by != self.user_id and book.owner_id != self.user_id:
             raise ServiceError(403, "只能修改或删除自己记录的账单")
@@ -328,7 +330,11 @@ class LedgerService:
         )
         if entry is None:
             raise ServiceError(409, "账单已在其他设备更新，请刷新后重试")
-        result = entry_response(entry)
+        # 局部导入避免预算服务复用 LedgerService 时形成模块循环。
+        from app.services.budget_execution import BudgetExecutionService
+
+        notice = await BudgetExecutionService(self).sync_entry(entry, old_book.id)
+        result = entry_response(entry).model_copy(update={"budget_notice": notice})
         if old_book.kind == "shared":
             self.activity(
                 old_book.id,
@@ -360,6 +366,10 @@ class LedgerService:
             )
             if not changed.rowcount:
                 raise ServiceError(409, "账单已在其他设备更新，请刷新后重试")
+            from app.services.budget_execution import BudgetExecutionService
+
+            await self.session.refresh(entry)
+            await BudgetExecutionService(self).sync_entry(entry, book.id)
             if book.kind == "shared":
                 self.activity(book.id, "delete_entry", entry_id, {"before": before})
         await self.session.commit()

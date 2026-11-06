@@ -81,6 +81,25 @@
       "style": {
         "navigationBarTitleText": "账本邀请"
       }
+    },
+    {
+      "path": "pages/budget-settings/index",
+      "style": {
+        "navigationBarTitleText": "家庭预算设置"
+      }
+    },
+    {
+      "path": "pages/budget-overview/index",
+      "style": {
+        "navigationBarTitleText": "家庭预算",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/budget-item/index",
+      "style": {
+        "navigationBarTitleText": "预算项目详情"
+      }
     }
   ],
   "globalStyle": {

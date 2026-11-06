@@ -39,6 +39,7 @@ export interface BookInvitation {
 }
 
 export interface Entry {
+  budgetNotice?: string
   updatedBy?: string
   updatedAt?: number
   version?: number

@@ -37,6 +37,9 @@ async def get_ledger_service(
     except SQLAlchemyError:
         await session.rollback()
         raise ServiceError(503, "账本服务暂时不可用，请稍后重试") from None
+    except ServiceError:
+        await session.rollback()
+        raise
 
 
 Ledger = Annotated[LedgerService, Depends(get_ledger_service)]

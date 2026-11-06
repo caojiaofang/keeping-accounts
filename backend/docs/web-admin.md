@@ -1,12 +1,12 @@
-# Web 管理端第一版
+# Web 管理端
 
-当前正式页面为 [`20261105T075026Z`](releases/20261105T075026Z.md)，后端为 `20261105T072604Z`。当前 `current` 发布目录与后端镜像标签不同，应分别检查 `IMAGE_TAG` 和 `ADMIN_IMAGE_TAG`。本次仅替换管理端静态页面，未执行数据库迁移或重启后端。
+后台服务端与正式页面已于 2026-11-06 更新至 [`20261106T115227Z`](releases/20261106T115227Z.md)。`current` 指向同名发布目录，`IMAGE_TAG`、`ADMIN_IMAGE_TAG` 均固定该版本。正式库已依次执行 `0005_admin`、`0006_budget`，原管理员密码摘要保留，账号设置与登录日志已启用；旧会话需重新登录。小程序本次未上传。
 
 ## 架构与访问地址
 
 ```text
 https://mjzs.zf-yun.cn
-  ├─ /、/login、/users、/books → 公共 Nginx → moji-admin:80（Vue 3 静态产物）
+  ├─ /、/login、/users、/books、/account、/login-logs → 公共 Nginx → moji-admin:80
   ├─ /prod-api/*              → 公共 Nginx → moji-backend:8000（管理 API）
   └─ /api/v1/*                → 公共 Nginx → moji-backend:8000（原小程序 API）
 ```
@@ -15,14 +15,14 @@ https://mjzs.zf-yun.cn
 
 根目录 Compose 的 `IMAGE_TAG` 指定后端版本，`ADMIN_IMAGE_TAG` 可单独指定 Web 版本，未设置时沿用 `IMAGE_TAG`。仅发布样式时只构建和更新 admin 服务，保留后端容器。
 
-管理数据复用现有表，本版无数据库迁移。管理员是后端环境配置中的独立账号，与微信用户表、共享账本持有人无关；本版不包含用户停用、账单改写、多管理员角色、AI 用量监控或完整管理审计中心。
+业务查询复用现有表；`0005_admin` 新增独立管理员和操作日志表。管理员与微信用户、共享账本持有人无关；不包含用户停用、账单改写、多管理员角色、AI 用量监控或完整管理审计中心。家庭预算 API 服务小程序，后台 Web 本次没有增加预算编辑页面。
 
 ## 登录与数据口径
 
-- `ADMIN_USERNAME`：管理员账号，默认 `admin`；`ADMIN_PASSWORD_HASH` 为 Argon2 摘要，未配置则不能登录。
+- `ADMIN_USERNAME`、`ADMIN_PASSWORD_HASH` 用于 `python admin_account.py bootstrap` 初始化独立管理员；已有账号不会被覆盖。生产已沿用原摘要初始化，后续以数据库账号为准。
 - 运行 `python admin_password.py` 交互生成密码摘要，生成器要求 12–256 字符密码。正式环境设置 `ADMIN_ORIGIN=https://mjzs.zf-yun.cn`。
 - Cookie 为 HttpOnly、SameSite=Strict、Path=/prod-api，正式环境启用 Secure。凭证不进入前端存储或 JSON 响应；Redis 只保存随机凭证的 SHA-256 摘要。
-- 管理会话使用 `moji:<环境>:admin:` 命名空间，默认有效八小时，登录按 IP 每分钟最多五次。退出即撤销当前会话；修改账号或密码摘要并重建后端后，旧会话失效。
+- 管理会话使用 `moji:<环境>:admin:v2:` 命名空间，默认有效八小时，登录按 IP 每分钟最多五次。会话绑定数据库账号版本；退出撤销当前会话，修改密码或退出全部会话会递增版本并使旧会话失效。
 - 登录与退出校验 Origin 和 Sec-Fetch-Site；浏览器页面与 API 同源访问。命令行请求允许不携带 Origin，但仍需合法凭证。
 - 所有管理响应设置 `Cache-Control: no-store`，参数错误不回显密码。没有公开的管理员注册接口。
 - 所有日期按北京时间展示；近七天登录用户按 `last_login_at` 统计，并非按每次业务请求统计。有效账单排除软删除记录，账本总数仅统计 `active`，趋势按创建时间归属日期，补记历史账单仍计入实际创建日。
@@ -36,6 +36,10 @@ https://mjzs.zf-yun.cn
 | POST | `/prod-api/auth/login` | JSON 账号密码登录，写入 Cookie |
 | GET | `/prod-api/auth/me` | 获取当前管理员，未登录返回 401 |
 | POST | `/prod-api/auth/logout` | 撤销会话并清除 Cookie |
+| GET | `/prod-api/account` | 获取当前账号设置 |
+| POST | `/prod-api/account/password` | 校验原密码、修改密码并撤销旧会话 |
+| POST | `/prod-api/account/logout-all` | 撤销全部会话 |
+| GET | `/prod-api/account/logs` | 分页查询登录与账号操作日志 |
 | GET | `/prod-api/overview` | 汇总与近十四天趋势 |
 | GET | `/prod-api/users` | q、page、page_size 分页查询 |
 | GET | `/prod-api/users/{id}` | 用户详情 |
@@ -46,7 +50,7 @@ https://mjzs.zf-yun.cn
 
 ## 发布
 
-当前生产仍采用本文列出的原管理员 API。账号设置与登录日志对应的新接口、管理员改造及 `0005_admin` 尚未发布，不能直接整仓部署。管理端正式构建默认关闭 `VITE_ADMIN_ACCOUNT_FEATURES`，只有新接口及迁移完成发布后才能显式开启；开发服务器默认开启，详见[构建开关](../../admin/README.md#账号功能开关)。本次使用静态产物白名单，单独更新 admin 容器；下面的完整发布流程保留为首次部署参考。
+当前生产已发布新管理员 API 与家庭预算 API，账号页面构建时显式设置 `VITE_ADMIN_ACCOUNT_FEATURES=true`，详见[构建开关](../../admin/README.md#账号功能开关)。本次迁移、备份、只读验收、故障恢复及回退命令见[发布记录](releases/20261106T115227Z.md)。`scripts/update-release.sh` 为本次从 `0004_shared` 升级的专用流程，依赖随版本保存的清单与验收脚本，不能直接作为后续版本的通用升级命令。下面保留首次部署流程供历史参考；新版本必须先备份并核对迁移链，再切换应用。
 
 首次从原后端单服务升级为仓库根目录双服务 Compose。旧发布目录保持原样，新的目录结构为：
 
@@ -60,10 +64,13 @@ https://mjzs.zf-yun.cn
   └─ admin/                     # Dockerfile、deploy/nginx.conf、dist
 ```
 
-本机先执行 `scripts/check.ps1 -Build` 和真实开发库管理查询集成测试，然后执行：
+本机先执行 `scripts/check.ps1 -Build` 和隔离 PostgreSQL 管理查询集成测试。当前版本需以 `VITE_ADMIN_ACCOUNT_FEATURES=true` 构建后使用 `-SkipBuild` 保留该产物：
 
 ```powershell
-.\scripts\package-release.ps1
+$env:VITE_ADMIN_ACCOUNT_FEATURES='true'
+npm.cmd --prefix admin run build
+Remove-Item Env:VITE_ADMIN_ACCOUNT_FEATURES
+.\scripts\package-release.ps1 -SkipBuild
 ```
 
 打包脚本仅包含清单中的源码和静态产物，不包含真实环境文件、初始账号文件、虚拟环境或 node_modules。上传生成的包到新的发布目录，解压后将共享环境文件链接为 `backend/.env.production`，在新目录根部设置 `.env` 的 IMAGE_TAG。
@@ -76,7 +83,7 @@ docker compose build
 docker compose up -d --wait --wait-timeout 90
 ```
 
-本版没有新迁移，无需修改数据库结构。双容器健康后，将 `backend/deploy/nginx.conf` 更新到 `/opt/nginx/conf.d/mjzs.zf-yun.cn.conf`，依次执行 `docker exec nginx-web nginx -t` 和 `docker exec nginx-web nginx -s reload`，随后验证：
+首次静态管理端部署没有新迁移；当前版本须在切换前执行至 `0006_budget`，首次启用账号表再运行 `python admin_account.py bootstrap`。公共 Nginx 已配置，无改动时无需覆盖或重载；配置变化时备份、检查并重载，随后验证：
 
 1. `/`、`/login`、刷新 `/users` 都返回管理页面。
 2. 未登录 `/prod-api/auth/me` 返回 401；登录后概览、用户、账本接口返回真实数据。
@@ -86,7 +93,7 @@ docker compose up -d --wait --wait-timeout 90
 
 全部通过后将 `/opt/keeping-accounts/current` 指向新目录。新版本运维命令从该目录根部运行，后端检查命令仍为 `docker compose exec -T backend ...`。
 
-若发布失败，恢复备份的公共 Nginx 配置和共享环境文件，在旧版本目录运行其 `docker compose up -d --wait`，恢复 current 链接。旧版本没有 admin 服务时可停止新 admin 容器，不删除数据库卷。此次无需数据库降级。
+若发布失败，在旧版本目录运行其 `docker compose up -d --no-build --wait`，恢复 current 链接；仅在配置确实变化时恢复配置。旧版本没有 admin 服务时可停止新 admin 容器，不删除数据库卷。当前 `0005_admin`、`0006_budget` 为增量表，回退旧应用时保留结构，不自动降级数据库；详见本次发布记录。
 
 ## 验证
 

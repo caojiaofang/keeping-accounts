@@ -22,6 +22,10 @@ try {
         backend/Dockerfile backend/.dockerignore backend/docker-compose.yml backend/deploy `
         admin/Dockerfile admin/.dockerignore admin/deploy admin/dist
     if ($LASTEXITCODE -ne 0) { throw '部署包生成失败。' }
+    # Linux 的 sha256sum 会把 CR 当成文件名的一部分，校验清单明确写为 UTF-8/LF。
+    $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    $checksumLine = "$archiveHash  $([IO.Path]::GetFileName($archive))`n"
+    [IO.File]::WriteAllText("$archive.sha256", $checksumLine, [Text.UTF8Encoding]::new($false))
     Write-Host "部署包：$archive"
     Write-Host "版本：$Release"
 }

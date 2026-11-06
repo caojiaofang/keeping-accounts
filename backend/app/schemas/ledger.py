@@ -106,6 +106,7 @@ class EntryResponse(EntryInput):
     version: int
     updated_by: UUID | None = None
     updated_at: int | None = None
+    budget_notice: str | None = None
 
 
 class LedgerResponse(LedgerSchema):
