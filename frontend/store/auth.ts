@@ -14,9 +14,10 @@ export const useAuthStore = defineStore('auth', () => {
   const restoring = ref(false)
   const loggingIn = ref(false)
   const loggingOut = ref(false)
+  const savingNickname = ref(false)
   const error = ref('')
   const isLoggedIn = computed(() => user.value !== null)
-  const busy = computed(() => restoring.value || loggingIn.value || loggingOut.value)
+  const busy = computed(() => restoring.value || loggingIn.value || loggingOut.value || savingNickname.value)
   let session: AuthSession | null = null
   let revision = 0
   let restoreTask: Promise<void> | undefined
@@ -42,12 +43,19 @@ export const useAuthStore = defineStore('auth', () => {
     useLedgerStore().switchAccount(null)
   }
 
+  function cacheNickname(current: AuthUser): void {
+    if (!current.nickname) return
+    // 保留旧版成员称呼入口的本地缓存；账号昵称始终以后端为准。
+    try { uni.setStorageSync(useLedgerStore().preferenceKey('nickname'), current.nickname) } catch { /* 缓存失败不影响云端昵称。 */ }
+  }
+
   async function activate(value: AuthSession): Promise<void> {
     try { uni.setStorageSync(AUTH_STORAGE_KEY, value) }
     catch { throw new Error('本地空间不足，登录状态未保存，请清理空间后重试') }
     useLedgerStore().switchAccount(value.user.id, value.accessToken)
     session = value
     user.value = value.user
+    cacheNickname(value.user)
     lastVerified = Date.now()
     error.value = ''
     await useLedgerStore().refreshCloud()
@@ -96,6 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function restore(): Promise<void> {
     if (restoreTask) return restoreTask
+    if (savingNickname.value) return Promise.resolve()
     restoreTask = restoreImpl().finally(() => { restoreTask = undefined })
     return restoreTask
   }
@@ -104,7 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function login(): Promise<void> {
     if (loginTask) return loginTask
-    if (restoring.value || loggingOut.value) return Promise.resolve()
+    if (restoring.value || loggingOut.value || savingNickname.value) return Promise.resolve()
     loginTask = (async () => {
       loggingIn.value = true
       error.value = ''
@@ -150,6 +159,31 @@ export const useAuthStore = defineStore('auth', () => {
     } finally { loggingOut.value = false }
   }
 
+  async function updateNickname(value: string): Promise<boolean> {
+    const nickname = value.trim()
+    if (!nickname || Array.from(nickname).length > 12) throw new Error('昵称需为 1 至 12 个字')
+    if (busy.value) return false
+    if (!session || !user.value) throw new Error('请先登录后再修改昵称')
+    const currentSession = session
+    const version = revision
+    savingNickname.value = true
+    try {
+      const current = await apiRequest<AuthUser>('/api/v1/auth/me', {
+        method: 'PUT', token: currentSession.accessToken, data: { nickname },
+      })
+      if (version !== revision || session !== currentSession) return false
+      if (!isAuthUser(current) || current.id !== currentSession.user.id || current.nickname !== nickname) {
+        throw new Error('昵称保存结果异常，请刷新后重试')
+      }
+      session = { ...currentSession, user: current }
+      user.value = current
+      // 云端已经提交成功，本地空间不足时仍可在下次登录校验中恢复昵称。
+      try { uni.setStorageSync(AUTH_STORAGE_KEY, session) } catch { /* 保留原登录凭证，下次从云端读取。 */ }
+      cacheNickname(current)
+      return true
+    } finally { savingNickname.value = false }
+  }
+
   function enterGuest(): void {
     if (busy.value) return
     const token = session?.accessToken
@@ -166,5 +200,5 @@ export const useAuthStore = defineStore('auth', () => {
     else await useLedgerStore().refreshCloud()
   }
 
-  return { user, ready, restoring, loggingIn, loggingOut, isLoggedIn, busy, error, bootstrap, restore, login, logout, enterGuest, verifyIfNeeded }
+  return { user, ready, restoring, loggingIn, loggingOut, savingNickname, isLoggedIn, busy, error, bootstrap, restore, login, logout, enterGuest, updateNickname, verifyIfNeeded }
 })

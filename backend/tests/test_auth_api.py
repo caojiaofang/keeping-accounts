@@ -28,6 +28,7 @@ def api():
             )
         ),
         current_user=AsyncMock(return_value=user),
+        update_profile=AsyncMock(return_value=user.model_copy(update={"nickname": "云端称呼"})),
     )
     sessions = SimpleNamespace(revoke=AsyncMock())
     app = create_app(Settings(_env_file=None, app_env="test", database_url=None, redis_url=None))
@@ -75,6 +76,54 @@ def test_logout_revokes_current_token(api):
     assert response.status_code == 204
     assert response.content == b""
     sessions.revoke.assert_awaited_once_with("a" * 43)
+
+
+def test_update_nickname_requires_token_and_returns_saved_user(api):
+    client, service, _ = api
+    assert client.put("/api/v1/auth/me", json={"nickname": "云端称呼"}).status_code == 401
+    service.update_profile.assert_not_awaited()
+    response = client.put(
+        "/api/v1/auth/me",
+        json={"nickname": "  云端称呼  "},
+        headers={"Authorization": "Bearer " + "a" * 43},
+    )
+    assert response.status_code == 200
+    assert response.json()["nickname"] == "云端称呼"
+    assert response.headers["Cache-Control"] == "no-store"
+    service.update_profile.assert_awaited_once_with("a" * 43, "云端称呼")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"nickname": " "},
+        {"nickname": "字" * 13},
+        {"nickname": None},
+        {"nickname": 123},
+        {"nickname": "昵称", "id": str(uuid4())},
+        {"nickname": "昵称", "openid": "other-user"},
+    ],
+)
+def test_invalid_nickname_or_target_identity_is_rejected(api, body):
+    client, service, _ = api
+    response = client.put(
+        "/api/v1/auth/me", json=body, headers={"Authorization": "Bearer " + "a" * 43}
+    )
+    assert response.status_code == 422
+    service.update_profile.assert_not_awaited()
+
+
+def test_nickname_storage_error_is_returned_as_retryable_failure(api):
+    client, service, _ = api
+    service.update_profile.side_effect = ServiceError(503, "昵称保存失败，请稍后重试")
+    response = client.put(
+        "/api/v1/auth/me",
+        json={"nickname": "云端称呼"},
+        headers={"Authorization": "Bearer " + "a" * 43},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "昵称保存失败，请稍后重试"}
 
 
 def test_login_errors_are_returned_without_internal_details(api):

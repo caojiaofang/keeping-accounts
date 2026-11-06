@@ -16,16 +16,20 @@ import { entryAuthor, canManageBook } from '@/common/services/shared-books'
 const store = useLedgerStore()
 const auth = useAuthStore()
 store.hydrate()
-onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
-onShow(() => { void store.refreshCloud() })
-const nickname = ref('认真生活的你')
-function loadNickname() {
-  nickname.value = auth.user ? '墨记用户' : '认真生活的你'
-  try { nickname.value = uni.getStorageSync(store.preferenceKey('nickname')) || nickname.value } catch { /* 无本地偏好时使用默认称呼。 */ }
+async function refreshProfile() {
+  if (!auth.ready) await auth.bootstrap()
+  else if (auth.user) await auth.restore()
 }
-loadNickname()
-onShow(loadNickname)
+onPullDownRefresh(async () => { try { await refreshProfile() } finally { uni.stopPullDownRefresh() } })
+onShow(() => { void refreshProfile() })
+const nickname = computed(() => {
+  if (!auth.user) return '认真生活的你'
+  if (auth.user.nickname) return auth.user.nickname
+  // 升级前仅保存在本机的称呼可继续显示，再次保存后写入云端。
+  try { return String(uni.getStorageSync(store.preferenceKey('nickname')) || '墨记用户') } catch { return '墨记用户' }
+})
 const nicknameOpen = ref(false)
+watch(() => auth.user?.id, () => { nicknameOpen.value = false })
 const budgetOpen = ref(false)
 const budgetVersion = ref<number>()
 watch(budgetOpen, open => { if (open) budgetVersion.value = store.activeBook.version })
@@ -37,12 +41,12 @@ const menuGroups = [
   [{ key: 'family-budget', title: '家庭预算', icon: 'home', description: '提前安排缴费、预留和储蓄' }, { key: 'categories', title: '收支分类', icon: 'tag', description: '生活里的各种小事' }, { key: 'export', title: '导出账单', icon: 'export', description: '复制当前账本的 CSV 数据' }],
   [{ key: 'help', title: '使用帮助', icon: 'help', description: '' }, { key: 'privacy', title: '数据与隐私', icon: 'shield', description: '' }, { key: 'about', title: '关于墨记', icon: 'info', description: 'v0.1.0' }],
 ]
-function saveNickname(value: string) {
-  if (!value) return toast('请输入你的昵称')
-  try { uni.setStorageSync(store.preferenceKey('nickname'), value) } catch { return toast('本地空间不足，昵称暂未保存') }
-  nickname.value = value
-  nicknameOpen.value = false
-  toast('昵称已更新')
+async function saveNickname(value: string) {
+  try {
+    if (!await auth.updateNickname(value)) return
+    nicknameOpen.value = false
+    toast('昵称已保存到云端')
+  } catch (cause) { toast(cause instanceof Error ? cause.message : '昵称保存失败，请重试') }
 }
 function openBudget() { if (!canManageBook(store.activeBook)) return toast('只有账本创建者可以设置共同预算'); budgetOpen.value = true }
 async function saveBudget(value: string) {
@@ -69,14 +73,14 @@ function menuAction(key: string) {
   else if (key === 'categories') categoriesOpen.value = true
   else if (key === 'export') exportEntries()
   else if (key === 'help') uni.showModal({ title: '开始使用墨记', content: '点击底部“记一笔”录入收支；点击明细中的账单可以编辑或删除。顶部可切换月份和账本，统计页会同步展示对应数据。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
-  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取头像、昵称或手机号。登录后的账本、账单、预算及分析对话保存在云端；体验数据与升级前的本机记录不会自动上传。智能记账会发送本轮文字、主动选择的图片、最近对话及待确认草稿给模型服务；图片会移除元数据，不在墨记服务端保存。记账对话只在当前页面保留，切换账号、账本或离开页面会清空，点击卡片确认后才保存账单。消费分析会按需发送统计或必要明细给模型服务；按记账人查询时，还会发送相关成员的显示名与账本内标识，用于区分谁记录了账单，不代表付款人。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
+  else if (key === 'privacy') uni.showModal({ title: '数据与隐私', content: '微信登录用于识别你的账号，不获取微信头像、昵称或手机号。你主动设置的账号昵称和登录后的账本、账单、预算及分析对话保存在云端；体验数据与升级前的本机记录不会自动上传。智能记账会发送本轮文字、主动选择的图片、最近对话及待确认草稿给模型服务；图片会移除元数据，不在墨记服务端保存。记账对话只在当前页面保留，切换账号、账本或离开页面会清空，点击卡片确认后才保存账单。消费分析会按需发送统计或必要明细给模型服务；按记账人查询时，还会发送相关成员的显示名与账本内标识，用于区分谁记录了账单，不代表付款人。', showCancel: false, confirmText: '知道了', confirmColor: '#285e4e' })
   else if (key === 'about') uni.showModal({ title: '墨记', content: '把日子，一笔一笔记好。\n\n版本 0.1.0\n一款简单、安静的日常记账工具。', showCancel: false, confirmText: '继续记录', confirmColor: '#285e4e' })
 }
 function reset() {
   uni.showModal({ title: '恢复演示数据？', content: '这会覆盖本机现有的账单、自建账本和预算设置。需要保留的账单请先导出。', confirmText: '恢复演示', confirmColor: '#ae674e', success: result => { if (result.confirm) { store.resetDemo(); toast('演示数据已恢复') } } })
 }
 function openAccount() {
-  if (auth.user) nicknameOpen.value = true
+  if (auth.user) { if (!auth.busy) nicknameOpen.value = true }
   else uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2Fprofile%2Findex' })
 }
 function logout() {
@@ -111,7 +115,7 @@ function logout() {
     <button v-else class="reset-button" @tap="reset">恢复演示数据</button>
     <view class="brand-footer"><text class="footer-brand">墨记</text><text>把日子，一笔一笔记好。</text></view>
     <BottomNav active="profile" />
-    <PromptSheet :open="nicknameOpen" title="怎么称呼你" placeholder="输入昵称" :initial="nickname" :maxlength="12" @close="nicknameOpen = false" @confirm="saveNickname" />
+    <PromptSheet :open="nicknameOpen" title="怎么称呼你" description="保存后会同步到账号，下次登录继续使用" placeholder="输入昵称" :initial="nickname" :maxlength="12" :loading="auth.savingNickname" @close="nicknameOpen = false" @confirm="saveNickname" />
     <PromptSheet :open="budgetOpen" title="设置月预算" :description="`正在设置「${store.activeBook.name}」的每月预算`" placeholder="输入预算金额（元）" :initial="String(store.activeBook.budget / 100)" numeric :maxlength="10" @close="budgetOpen = false" @confirm="saveBudget" />
     <view v-if="categoriesOpen" class="sheet-mask" @tap="categoriesOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">收支分类</text><button class="icon-button" aria-label="关闭分类" @tap="categoriesOpen = false"><AppIcon name="close" :size="34" /></button></view><view class="category-toggle"><button :class="{ active: categoryType === 'expense' }" @tap="categoryType = 'expense'">支出分类</button><button :class="{ active: categoryType === 'income' }" @tap="categoryType = 'income'">收入分类</button></view><scroll-view scroll-y style="max-height: 50vh;"><view class="category-list"><view v-for="category in visibleCategories" :key="category.id" class="category-item"><view :style="{ background: category.color }"><AppIcon :name="category.icon" :size="39" /></view><text>{{ category.name }}</text></view></view></scroll-view><view class="footnote">让生活的小事，各有所属</view></view></view>
   </view>

@@ -50,6 +50,7 @@ AUTH_LOGIN_RATE_LIMIT=30
   "user": {
     "id": "8301be9b-2387-47f0-91af-6f6db7a95c5d",
     "openid": "由微信返回的用户唯一标识",
+    "nickname": null,
     "created_at": "2026-10-24T00:00:00Z",
     "last_login_at": "2026-10-24T00:00:00Z"
   }
@@ -73,6 +74,16 @@ Authorization: Bearer <access_token>
 返回 HTTP 200，响应结构与登录结果中的 `user` 相同。无 token、格式错误、已到期、已注销或用户不存在时返回 HTTP 401。
 
 openid 用于标识用户，不能代替登录凭证。后端先校验 Redis 登录态，再按其中的用户 ID 和当前 AppID 查询数据库，不能通过传入其他人的 openid 获取身份。
+
+## 保存账号昵称
+
+`PUT /api/v1/auth/me`
+
+携带相同的 Bearer 请求头，请求体为 `{"nickname":"认真生活的你"}`。昵称由用户主动输入，不读取微信昵称；去除首尾空白后必须为 1 至 12 个字。请求只允许 `nickname` 字段，不能指定用户 ID、openid 或 AppID。
+
+成功提交 PostgreSQL 事务后返回 HTTP 200，响应结构与 `GET /api/v1/auth/me` 相同，包含 `nickname`。仅修改登录 token 对应且属于当前小程序的用户，不修改共享账本内单独设置的成员称呼。登录、身份恢复和再次进入「我的」时读取这份数据，因此退出重登、清除本机缓存或换设备后仍可恢复。数据库保存失败返回 HTTP 503，前端保留输入供重试。
+
+新增迁移为 `0007_nickname`，在 `0006_budget` 后为 `users` 增加可空的 `nickname VARCHAR(12)`；原用户初始值为 `null`。部署新后端前先在目标环境执行 `python -m alembic upgrade head`，随后发布后端与新版小程序。旧版本机昵称不会自动上传，用户再次保存后写入云端。
 
 ## 退出登录
 
@@ -159,6 +170,8 @@ try {
 ```
 
 该集成测试只允许开发环境，模拟微信身份，使用外层 PostgreSQL 事务回滚测试用户，Redis 使用随机独立前缀并清理。覆盖首次登录、重复用户、token 有效期、当前用户、单凭证退出、限流和无效 code，不会留下模拟微信用户。
+
+2026-11-06 的昵称功能已通过 `tests/test_profile_integration.py` 在临时 PostgreSQL 中验证：旧用户增量迁移、昵称真实提交和重新读取、重新登录保留昵称、其他用户与其他 AppID 隔离，以及迁移回退后重新升级。该测试只接受 `MOJI_PROFILE_TEST_URL` 指定的本机 `moji_profile_test` 库，并要求 `MOJI_RUN_INTEGRATION_TESTS=1`；微信和 token 解析使用模拟，测试 schema 与数据最终全部回滚，不访问开发或正式库。前端 `npm run check:auth` 同时覆盖重启、清缓存、账号切换、保存失败重试、重复提交及迟到响应。
 
 真实微信用户端到端验收需要微信开发者工具或真机 `wx.login` 返回的新 code。可在开发者工具控制台运行 `wx.login({ success: r => console.log(r.code) })`，随后在 Swagger 中调用登录接口；微信身份以官方接口实际返回值为准。
 

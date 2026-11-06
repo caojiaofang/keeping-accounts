@@ -42,7 +42,7 @@ def test_budget_models_are_registered_and_versions_and_money_use_bigint():
 
 def test_budget_is_a_single_incremental_head_after_admin():
     scripts = ScriptDirectory.from_config(migration_config())
-    assert scripts.get_heads() == ["0006_budget"]
+    assert len(scripts.get_heads()) == 1
     assert scripts.get_revision("0006_budget").down_revision == "0005_admin"
 
 

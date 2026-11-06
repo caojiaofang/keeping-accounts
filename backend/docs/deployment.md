@@ -1,10 +1,8 @@
 # z11 正式部署
 
-当前正式后端与后台 Web 镜像均为 [`20261106T115227Z`](releases/20261106T115227Z.md)，2026-11-06 北京时间 19:56 完成发布。正式库先由 `0004_shared` 经 `0005_admin` 升至 `0006_budget`，再切换两个服务；家庭预算接口、账号设置与登录日志已发布。管理员沿用原密码摘要，旧会话需重新登录。开发库本次未升级，小程序未上传或发布。
+当前正式后端与后台 Web 镜像均为 [`20261106T121956Z`](releases/20261106T121956Z.md)，2026-11-06 北京时间 20:23 完成发布。正式库由 `0006_budget` 升至 `0007_nickname`，账号昵称保存接口与 Web 昵称展示已上线。管理员密码保留，账号设置与登录日志继续启用；小程序本次未上传或发布。
 
-既有 V2 配置保留：`CHAT_V2_ENABLED=true`、`CHAT_V2_TOOL_MODE=native`，使用独立分页密钥；新客户端协商后使用 V2，旧客户端继续使用 V1。正式环境文件与公共 Nginx 配置逐字节未变。本次使用服务端源码与 Web 静态文件白名单包，迁移、备份、故障恢复和只读验收见[本次发布记录](releases/20261106T115227Z.md)，历史启用过程见[V2 启用记录](releases/20261105T084818Z.md)。
-
-当前 `current` 指向 `/opt/keeping-accounts/releases/20261106T115227Z`，该目录根部 `.env` 的 `IMAGE_TAG` 与 `ADMIN_IMAGE_TAG` 均固定为 `20261106T115227Z`。管理端以 `VITE_ADMIN_ACCOUNT_FEATURES=true` 构建；后续重新打包需保留该开关。上一版本目录与镜像均保留供回退。小程序设备验收及上传仍待完成。
+既有 V2 enabled／native 配置保留，正式环境文件与公共 Nginx 配置逐字节未变。当前 `current` 指向 `/opt/keeping-accounts/releases/20261106T121956Z`，目录根部 `.env` 的 `IMAGE_TAG` 与 `ADMIN_IMAGE_TAG` 均固定该版本。管理端以 `VITE_ADMIN_ACCOUNT_FEATURES=true` 构建；后续打包需保留该开关。备份、验收与回退见[本次发布记录](releases/20261106T121956Z.md)。
 
 公网地址为 `https://mjzs.zf-yun.cn`，健康检查为 `/api/v1/health`，小程序接口前缀为 `/api/v1`。Web 管理端上线后根路径提供管理页面，管理接口前缀为 `/prod-api`，前后端分别运行于独立容器。双服务发布及新目录结构见 [Web 管理端部署](web-admin.md)，以下保留原后端单服务部署说明供旧版本运维与回退参考。
 

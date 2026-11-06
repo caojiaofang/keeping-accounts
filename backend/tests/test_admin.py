@@ -18,6 +18,7 @@ from app.core.errors import ServiceError
 from app.main import create_app
 from app.models.admin import AdminAccount
 from app.repositories.admin import AuditContext
+from app.schemas.admin import AdminUser, Page
 from app.services.admin_auth import AdminAuth, password_hasher
 from app.services.sessions import SessionStore
 
@@ -272,6 +273,28 @@ def test_filters_validation_and_business_mutations_are_unavailable(api):
     for method in ("post", "put", "delete", "patch"):
         assert getattr(client, method)("/prod-api/books").status_code == 405
         assert getattr(client, method)("/prod-api/users").status_code == 405
+
+
+@pytest.mark.parametrize("nickname", ["云端昵称", None])
+def test_user_list_and_detail_return_account_nickname(api, nickname):
+    client, _, service, _ = api
+    assert login(client).status_code == 200
+    user = AdminUser(
+        id=uuid4(),
+        nickname=nickname,
+        created_at=datetime.now(UTC),
+        last_login_at=datetime.now(UTC),
+        book_count=1,
+        entry_count=2,
+    )
+    service.users.return_value = Page(items=[user], total=1, page=1, page_size=20)
+    service.user = AsyncMock(return_value=user)
+    listing = client.get("/prod-api/users")
+    detail = client.get(f"/prod-api/users/{user.id}")
+    assert listing.status_code == detail.status_code == 200
+    assert listing.json()["items"][0]["nickname"] == nickname
+    assert detail.json()["nickname"] == nickname
+    assert "openid" not in detail.json()
 
 
 def test_account_password_change_invalidates_old_password_and_all_tokens(api):

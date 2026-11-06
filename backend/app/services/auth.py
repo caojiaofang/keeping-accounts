@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.integrations.wechat import WeChatClient
-from app.repositories.users import find_user, upsert_wechat_user
+from app.repositories.users import find_user, update_user_nickname, upsert_wechat_user
 from app.schemas.auth import LoginResponse, UserResponse
 from app.services.sessions import SessionStore, unauthorized
 
@@ -49,3 +49,17 @@ class AuthService:
         if user is None:
             raise unauthorized()
         return UserResponse.model_validate(user)
+
+    async def update_profile(self, token: str, nickname: str) -> UserResponse:
+        user_id = await self.sessions.resolve(token)
+        try:
+            async with self.session.begin():
+                user = await update_user_nickname(
+                    self.session, user_id, self.settings.wechat_app_id, nickname
+                )
+                if user is None:
+                    raise unauthorized()
+                result = UserResponse.model_validate(user)
+        except SQLAlchemyError:
+            raise ServiceError(503, "昵称保存失败，请稍后重试") from None
+        return result

@@ -177,7 +177,8 @@ def test_card_and_sentences_arrive_before_completion_and_fallback_is_saved(monke
         if failure:
             assert "已保留账单统计结果" in answer
             assert "999" not in answer
-            assert "999" not in json.dumps(events, ensure_ascii=False)
+            # 只排除模型的错误金额文案，时间戳与随机标识可能合法包含 999。
+            assert "错误金额999元" not in json.dumps(events, ensure_ascii=False)
         else:
             assert answer == "账单统计。\n\n共 2 笔。可以先核对主要分类。"
         assert events[-1]["data"]["result"]["text"] == answer

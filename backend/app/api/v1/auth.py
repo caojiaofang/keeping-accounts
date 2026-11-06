@@ -3,7 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.api.auth_deps import get_access_token, get_auth_service, get_session_store
-from app.schemas.auth import AuthErrorResponse, LoginResponse, UserResponse, WeChatLoginRequest
+from app.schemas.auth import (
+    AuthErrorResponse,
+    LoginResponse,
+    UpdateProfileRequest,
+    UserResponse,
+    WeChatLoginRequest,
+)
 from app.services.auth import AuthService
 from app.services.sessions import SessionStore
 
@@ -34,6 +40,17 @@ async def current_user(
 ) -> UserResponse:
     response.headers["Cache-Control"] = "no-store"
     return await service.current_user(token)
+
+
+@router.put("/me", response_model=UserResponse, summary="保存当前用户的账号昵称")
+async def update_profile(
+    body: UpdateProfileRequest,
+    response: Response,
+    token: Annotated[str, Depends(get_access_token)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+) -> UserResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.update_profile(token, body.nickname)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="注销当前登录凭证")

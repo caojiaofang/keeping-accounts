@@ -91,6 +91,7 @@ class AdminService:
         )
         return select(
             User.id,
+            User.nickname,
             User.created_at,
             User.last_login_at,
             books.label("book_count"),

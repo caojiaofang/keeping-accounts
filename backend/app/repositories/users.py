@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,4 +26,15 @@ async def upsert_wechat_user(session: AsyncSession, app_id: str, openid: str) ->
 async def find_user(session: AsyncSession, user_id: UUID, app_id: str) -> User | None:
     return await session.scalar(
         select(User).where(User.id == user_id, User.wechat_app_id == app_id)
+    )
+
+
+async def update_user_nickname(
+    session: AsyncSession, user_id: UUID, app_id: str, nickname: str
+) -> User | None:
+    return await session.scalar(
+        update(User)
+        .where(User.id == user_id, User.wechat_app_id == app_id)
+        .values(nickname=nickname)
+        .returning(User)
     )

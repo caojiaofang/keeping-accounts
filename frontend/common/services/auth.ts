@@ -1,6 +1,7 @@
 export interface AuthUser {
   id: string
   openid: string
+  nickname?: string | null
   created_at: string
   last_login_at: string
 }
@@ -24,6 +25,7 @@ export function isAuthUser(value: unknown): value is AuthUser {
   const user = value as AuthUser
   return typeof user.id === 'string' && /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(user.id)
     && typeof user.openid === 'string' && !!user.openid.trim()
+    && (user.nickname == null || (typeof user.nickname === 'string' && !!user.nickname.trim() && Array.from(user.nickname).length <= 12))
     && typeof user.created_at === 'string' && Number.isFinite(Date.parse(user.created_at))
     && typeof user.last_login_at === 'string' && Number.isFinite(Date.parse(user.last_login_at))
 }

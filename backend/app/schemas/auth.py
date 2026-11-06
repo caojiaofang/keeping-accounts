@@ -21,8 +21,20 @@ class UserResponse(BaseModel):
 
     id: UUID
     openid: str
+    nickname: str | None = None
     created_at: datetime
     last_login_at: datetime
+
+
+class UpdateProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    nickname: str = Field(min_length=1, max_length=12, description="用户主动设置的账号昵称")
+
+    @field_validator("nickname", mode="before")
+    @classmethod
+    def trim_nickname(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class LoginResponse(BaseModel):

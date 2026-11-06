@@ -52,7 +52,11 @@ async function server(options) {
   }
   if (pathname.endsWith('/logout')) { sessions.delete(token); return { statusCode: 204, data: '' } }
   if (!sessions.has(token)) return { statusCode: 401, data: { detail: '登录已过期，请重新登录' } }
-  const user = sessions.get(token)
+  const user = users.find(item => item.id === sessions.get(token).id)
+  if (pathname === '/api/v1/auth/me') {
+    if (options.method === 'PUT') user.nickname = options.data.nickname
+    return { statusCode: 200, data: clone(user) }
+  }
   if (!cloudStates.has(user.id)) cloudStates.set(user.id, { books: [{ id: `daily-${user.id}`, name: '日常账本', budget: 500000, version: 1, kind: 'personal', icon: 'leaf', color: '#e1eee7', description: '' }], entries: [] })
   const state = cloudStates.get(user.id)
   if (pathname === '/api/v1/ledger') return { statusCode: 200, data: clone(state) }
@@ -104,7 +108,7 @@ globalThis.uni = {
 }
 const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 async function fresh(clear = true) {
-  if (clear) { storage.clear(); sessions.clear(); cloudStates.clear(); loginCount = 0; sequence = 0; codeHistory.length = 0 }
+  if (clear) { storage.clear(); sessions.clear(); cloudStates.clear(); users.forEach(user => { delete user.nickname }); loginCount = 0; sequence = 0; codeHistory.length = 0 }
   storageFailure = false
   identity = users[0]
   handler = server
@@ -192,6 +196,107 @@ await check('退出、切换用户与重新启动分别恢复各自的记录和�
   const restarted = await fresh(false)
   assert.equal(restarted.auth.user.id, users[0].id)
   assert.equal(restarted.ledger.entries[0].amount, 800)
+})
+
+await check('昵称保存到账号后，重启、退出重登、清除缓存和切换账号都从后台恢复', async () => {
+  let { auth, ledger } = await fresh()
+  await auth.login()
+  assert.equal(await auth.updateNickname('  云端的称呼  '), true)
+  assert.equal(auth.user.nickname, '云端的称呼')
+  assert.equal(storage.get(AUTH_STORAGE_KEY).user.nickname, '云端的称呼')
+  assert.equal(storage.get(ledger.preferenceKey('nickname')), '云端的称呼')
+  ;({ auth, ledger } = await fresh(false))
+  assert.equal(auth.user.nickname, '云端的称呼')
+  users[0].nickname = '其他设备的新称呼'
+  await auth.restore()
+  assert.equal(auth.user.nickname, '其他设备的新称呼')
+  await auth.logout()
+  identity = users[1]
+  await auth.login()
+  assert.equal(auth.user.nickname, undefined)
+  assert.equal(await auth.updateNickname('乙的云端称呼'), true)
+  await auth.logout()
+  storage.clear()
+  identity = users[0]
+  await auth.login()
+  assert.equal(auth.user.nickname, '其他设备的新称呼')
+})
+
+await check('昵称保存失败或响应异常时保留原值，重试成功后才更新', async () => {
+  const { auth } = await fresh()
+  await auth.login()
+  await auth.updateNickname('原昵称')
+  const saved = clone(storage.get(AUTH_STORAGE_KEY))
+  for (const response of [
+    { statusCode: 503, data: { detail: '昵称保存失败，请稍后重试' } },
+    { statusCode: 200, data: { ...users[1], nickname: '新昵称' } },
+    { statusCode: 200, data: { ...users[0], nickname: '未保存的昵称' } },
+  ]) {
+    handler = async () => response
+    await assert.rejects(auth.updateNickname('新昵称'))
+    assert.equal(auth.user.nickname, '原昵称')
+    assert.deepEqual(storage.get(AUTH_STORAGE_KEY), saved)
+    assert.equal(auth.savingNickname, false)
+  }
+  handler = async () => { throw new Error('offline') }
+  await assert.rejects(auth.updateNickname('新昵称'), /连接不到服务/)
+  assert.equal(auth.user.nickname, '原昵称')
+  handler = server
+  assert.equal(await auth.updateNickname('新昵称'), true)
+})
+
+await check('昵称限制为1至12个字，保存期间阻止重复提交和身份刷新覆盖', async () => {
+  const { auth } = await fresh()
+  await assert.rejects(auth.updateNickname('名字'), /先登录/)
+  await auth.login()
+  await assert.rejects(auth.updateNickname('  '), /1 至 12/)
+  await assert.rejects(auth.updateNickname('长'.repeat(13)), /1 至 12/)
+  let release
+  let requests = 0
+  handler = async options => {
+    requests++
+    await new Promise(resolve => { release = resolve })
+    return server(options)
+  }
+  const saving = auth.updateNickname('名字')
+  await tick()
+  assert.equal(auth.savingNickname, true)
+  assert.equal(await auth.updateNickname('重复'), false)
+  await auth.restore()
+  assert.equal(requests, 1)
+  release()
+  assert.equal(await saving, true)
+  assert.equal(auth.user.nickname, '名字')
+})
+
+await check('云端昵称已提交时本地缓存失败仍算成功，下次访问从后台读取', async () => {
+  const { auth } = await fresh()
+  await auth.login()
+  storageFailure = true
+  assert.equal(await auth.updateNickname('已保存到后台'), true)
+  assert.equal(auth.user.nickname, '已保存到后台')
+  const restarted = await fresh(false)
+  assert.equal(restarted.auth.user.nickname, '已保存到后台')
+})
+
+await check('失效凭证清理后迟到的昵称保存响应不会恢复旧账号', async () => {
+  const { auth } = await fresh()
+  await auth.login()
+  const token = storage.get(AUTH_STORAGE_KEY).accessToken
+  let release
+  handler = async options => {
+    if (options.method !== 'PUT') return { statusCode: 401, data: { detail: '登录已过期' } }
+    const response = await server(options)
+    await new Promise(resolve => { release = () => resolve(response) })
+    return response
+  }
+  const saving = auth.updateNickname('旧请求')
+  await tick()
+  await assert.rejects(apiRequest('/api/v1/auth/me', { token }))
+  release()
+  assert.equal(await saving, false)
+  assert.equal(auth.user, null)
+  assert.equal(storage.has(AUTH_STORAGE_KEY), false)
 })
 
 await check('401 清理失效凭证与当前账号内存，保留各账号持久化数据', async () => {
