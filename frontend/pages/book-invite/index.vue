@@ -87,7 +87,7 @@ function backToBooks() { forgetInvitation(); uni.redirectTo({ url: '/pages/share
       <view class="invite-from"><MemberAvatar :name="inviter.name" :color="inviter.color" :size="90" /><text>{{ inviter.name }}邀请你</text></view>
       <text class="invitation-title">一起记好小家的日常</text>
       <view class="invited-book"><AppIcon name="home" :size="57" /><text>{{ title }}</text><text class="preview-member-count">多人账本 · 确认加入后才可查看收支</text></view>
-      <view class="invite-benefit"><AppIcon name="check" :size="26" /><text>共同查看收支、统计和日历</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>每一笔保留记账人和修改记录</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>成员维护自己的账单，创建者管理账本</text></view>
+      <view class="invite-benefit"><AppIcon name="check" :size="26" /><text>共同查看收支、统计和日历</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>每一笔保留记账人和修改记录</text></view><view class="invite-benefit"><AppIcon name="check" :size="26" /><text>成员可修改、删除任意单笔账单；整本账本仅创建者可解散</text></view>
       <view v-if="store.accountId && isCloudInvitation(token) && !joined" class="join-name"><text>以「{{ name }}」加入账本</text><text class="join-name-hint">成员显示账号昵称，可在「我的」修改</text></view>
       <text class="invite-expiry">{{ isExample ? '示例邀请，接受后会在本机创建演示账本。' : preview ? `邀请有效至 ${localDate(new Date(preview.expiresAt))}` : '' }}</text>
       <button class="primary-button accept-invite" :disabled="joining || auth.busy || (isCloudInvitation(token) && store.syncing)" :loading="joining" @tap="accept">{{ joined ? '已在账本中，查看账本' : isExample ? '接受示例邀请' : auth.isLoggedIn ? '确认加入这个账本' : '微信登录后加入' }}</button>

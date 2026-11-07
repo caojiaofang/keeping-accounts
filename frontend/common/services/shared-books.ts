@@ -20,7 +20,7 @@ export function canManageBook(book?: Book, userId = book?.currentUserId || DEMO_
 }
 
 export function canEditEntry(book: Book | undefined, entry: Entry, userId = book?.currentUserId || DEMO_USER_ID): boolean {
-  return canWriteBook(book, userId) && (book?.kind !== 'shared' || canManageBook(book, userId) || entry.createdBy === userId)
+  return entry.bookId === book?.id && canWriteBook(book, userId)
 }
 
 export function entryAuthor(book: Book | undefined, entry: Entry): string {

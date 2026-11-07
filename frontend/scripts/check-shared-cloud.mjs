@@ -126,7 +126,7 @@ await check('成员确认加入后读取共同账单，自己的权限与创建�
   const book = ledger.books.find(b => b.id === id)
   assert.equal(ledger.entries.length, 2)
   assert.equal(canManageBook(book), false)
-  assert.equal(canEditEntry(book, ledger.entries[0]), false)
+  assert.equal(canEditEntry(book, ledger.entries[0]), true)
   assert.equal(canEditEntry(book, ledger.entries[1]), true)
   assert.equal(await ledger.updateBudget(10000), false)
   assert.equal(await ledger.createInvitation(id), undefined)
@@ -186,13 +186,13 @@ await check('聊天账单入口重新读取当前记录，已删除或移出账�
   await assert.rejects(ledger.readEntryReference(entry.id, entry.bookId), /已删除或移出/)
 })
 
-await check('共同账单可只读查看他人记录，当前成员失效后入口拒绝访问', async () => {
+await check('共同成员可打开并编辑他人记录，当前成员失效后入口拒绝访问', async () => {
   const { auth, ledger } = await fresh()
   const id = await ledger.addBook('家庭', true), invite = await ledger.createInvitation(id)
   entries.push({ id: 'owner-entry', bookId: id, type: 'expense', categoryId: 'food', amount: 500, note: '共同账单', date: '2026-11-05', account: '微信', createdAt: 1, createdBy: users[0].id })
   await login(auth, users[1]); await ledger.acceptInvitation(invite.token, '小林'); ledger.selectBook(id)
   const current = await ledger.readEntryReference('owner-entry', id)
-  assert.equal(canEditEntry(current.book, current.entry), false)
+  assert.equal(canEditEntry(current.book, current.entry), true)
   books.get(id).members.find(member => member.userId === users[1].id).status = 'removed'
   await assert.rejects(ledger.readEntryReference('owner-entry', id), /无法访问这个账本/)
 })

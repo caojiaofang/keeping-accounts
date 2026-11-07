@@ -18,7 +18,7 @@ function author(entry: Entry) { return entryAuthor(store.books.find(book => book
 function editor(entry: Entry) { return entryEditor(store.books.find(book => book.id === entry.bookId), entry) }
 function edit(entry: Entry) {
   if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) {
-    uni.showModal({ title: '共同账单详情', content: `${store.categoryOf(entry.categoryId).name} · ${entry.type === 'income' ? '收入' : '支出'} ${money(entry.amount)} 元\n${entry.date}${entry.time ? ` ${entry.time}` : ''}\n记账人：${author(entry)}\n${entry.note || entry.account}\n\n这笔账单由其他成员记录，你可以查看。`, showCancel: false, confirmText: '知道了' })
+    uni.showModal({ title: '共同账单详情', content: `${store.categoryOf(entry.categoryId).name} · ${entry.type === 'income' ? '收入' : '支出'} ${money(entry.amount)} 元\n${entry.date}${entry.time ? ` ${entry.time}` : ''}\n记账人：${author(entry)}\n${entry.note || entry.account}\n\n你已无权修改这个账本的账单，请刷新后重试。`, showCancel: false, confirmText: '知道了' })
     return
   }
   uni.navigateTo({ url: `/pages/record/index?id=${encodeURIComponent(entry.id)}` })

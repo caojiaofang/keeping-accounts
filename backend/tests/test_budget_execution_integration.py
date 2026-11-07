@@ -411,8 +411,67 @@ async def move_case(clock):
         assert target["balance"]["availableAmount"] == -10000
 
 
-def test_shared_members_can_link_own_bills_but_not_write_other_funds(monkeypatch):
+def test_shared_members_can_link_all_bills_but_not_write_other_funds(monkeypatch):
     run_case(monkeypatch, permissions_case)
+
+
+def test_shared_members_can_edit_and_delete_all_bills_but_cannot_close_book(monkeypatch):
+    async def case(clock):
+        async with local_api() as api:
+            owner = await entry(api, book=1)
+            path = f"/entries/{owner['id']}"
+            edited = await ledger(api, "PUT", path, edit_body(owner, amount=12000), who=1)
+            assert edited["createdBy"] == str(api.users[0])
+            assert edited["updatedBy"] == str(api.users[1]) and edited["version"] == 2
+            await ledger(api, "PUT", path, edit_body(owner), expected=409)
+            await ledger(api, "PUT", path, edit_body(edited), who=2, expected=404)
+            await ledger(api, "DELETE", path + "?version=2", who=2, expected=404)
+            await ledger(
+                api,
+                "POST",
+                f"/books/{api.books[1]}/close",
+                {"version": 1},
+                who=1,
+                expected=404,
+            )
+            assert (await ledger(api, "GET", f"/books/{api.books[1]}", who=1))["id"] == str(
+                api.books[1]
+            )
+            await ledger(api, "DELETE", path + "?version=1", who=1, expected=409)
+            for _ in range(2):
+                await ledger(api, "DELETE", path + "?version=2", who=1, expected=204)
+            async with api.sessions() as session:
+                deleted = await session.get(LedgerEntry, UUID(owner["id"]))
+                assert deleted.is_deleted and deleted.version == 3
+                assert deleted.created_by == api.users[0] and deleted.updated_by == api.users[1]
+                activities = list(
+                    await session.scalars(
+                        select(BookActivity).where(BookActivity.target_id == deleted.id)
+                    )
+                )
+                edits = [row for row in activities if row.action == "update_entry"]
+                deletes = [row for row in activities if row.action == "delete_entry"]
+                assert len(edits) == len(deletes) == 1
+                assert edits[0].actor_id == deletes[0].actor_id == api.users[1]
+                assert edits[0].payload["before"]["amount"] == 10000
+                assert edits[0].payload["after"]["amount"] == 12000
+            snapshot = await ledger(api, "GET", "/ledger", who=1)
+            assert not any(row["id"] == owner["id"] for row in snapshot["entries"])
+            remaining = await entry(api, book=1)
+            await ledger(api, "POST", f"/books/{api.books[1]}/close", {"version": 1}, expected=204)
+            await ledger(
+                api,
+                "PUT",
+                f"/entries/{remaining['id']}",
+                edit_body(remaining),
+                who=1,
+                expected=404,
+            )
+            await ledger(
+                api, "DELETE", f"/entries/{remaining['id']}?version=1", who=1, expected=404
+            )
+
+    run_case(monkeypatch, case)
 
 
 async def permissions_case(clock):
@@ -424,7 +483,7 @@ async def permissions_case(clock):
         body = association(api, own, index=3)
         await api.request("PUT", 1, f"/entries/{own['id']}/link", body, who=1)
         assert (await detail(api, book=1, index=3, who=1))["balance"]["availableAmount"] == 42000
-        await link(api, owner, book=1, who=1, expected=403)
+        await link(api, owner, book=1, who=1)
         await link(api, own, book=1, who=2, expected=404)
         await api.request("GET", 1, f"/entries/{owner['id']}/link", who=1)
         await api.request("GET", 0, f"/entries/{own['id']}/link", expected=404)
@@ -445,7 +504,7 @@ async def permissions_case(clock):
             edit_body(owner, bookId=str(api.books[0])),
             expected=422,
         )
-        await ledger(api, "DELETE", f"/entries/{owner['id']}?version=1", who=1, expected=403)
+        await ledger(api, "DELETE", f"/entries/{owner['id']}?version=1", who=1, expected=204)
         async with api.sessions() as session:
             await session.execute(
                 update(BookMember)
@@ -455,6 +514,7 @@ async def permissions_case(clock):
             await session.commit()
         await api.request("PUT", 1, f"/entries/{own['id']}/link", body, who=1, expected=404)
         await api.request("GET", 1, "/months/2026-11/execution", who=1, expected=404)
+        await ledger(api, "DELETE", f"/entries/{own['id']}?version=1", who=1, expected=404)
         await ledger(api, "DELETE", f"/entries/{own['id']}?version=1", expected=204)
         assert (await detail(api, book=1, index=3))["balance"]["availableAmount"] == 52000
 

@@ -307,9 +307,8 @@ class LedgerService:
             raise ServiceError(409, "账单已被转移，请重新读取后重试")
         if entry.is_deleted and not include_deleted:
             raise ServiceError(404, "账单不存在或无权访问")
-        book = await self.require_book(entry.book_id, write=write)
-        if write and entry.created_by != self.user_id and book.owner_id != self.user_id:
-            raise ServiceError(403, "只能修改或删除自己记录的账单")
+        # 有效成员可维护全部共同账单；整本账本的管理仍单独校验创建者权限。
+        await self.require_book(entry.book_id, write=write)
         return entry
 
     async def update_entry(self, entry_id: UUID, body: UpdateEntry) -> EntryResponse:

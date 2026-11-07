@@ -76,7 +76,7 @@ await check('修正期初保留替代链，原请求重试不重复资金', asyn
   assert.equal(result.replacement.replacesId, opening.id); assert.equal(result.balance.availableAmount, 100000)
   assert.ok(stored.records.some(r => r.id === opening.id && r.voidedAt !== null))
 })
-await check('共同成员能查看，但只能关联自己的账单且不能修改储备目标', async () => {
+await check('共同成员可关联所有共同账单，但不能修改储备目标', async () => {
   const storage = new Map()
   globalThis.uni = { getStorageSync: k => storage.get(k), setStorageSync: (k, v) => storage.set(k, structuredClone(v)), removeStorageSync: k => storage.delete(k), request: () => assert.fail('体验不能联网') }
   setActivePinia(createPinia())
@@ -89,9 +89,9 @@ await check('共同成员能查看，但只能关联自己的账单且不能修�
   book.members[0].role = 'member'; book.members[1].role = 'owner'; store.connect(context, () => entries)
   assert.ok(await store.query('detail', reserve))
   assert.equal(await store.write('fund', reserve, { requestId: req(), fundVersion: 0, id: 'forbidden', kind: 'deposit', amount: 100, date: today }), undefined)
-  assert.equal(await store.write('setLink', entries[1].id, { requestId: req(), entryVersion: 1, linkVersion: 0, itemId: reserve }), undefined)
+  assert.ok(await store.write('setLink', entries[1].id, { requestId: req(), entryVersion: 1, linkVersion: 0, itemId: reserve }))
   assert.ok(await store.write('setLink', entries[0].id, { requestId: req(), entryVersion: 1, linkVersion: 0, itemId: reserve }))
-  assert.equal((await store.query('detail', reserve)).balance.availableAmount, -10000)
+  assert.equal((await store.query('detail', reserve)).balance.availableAmount, -20000)
 })
 await check('资金流水分页不丢审计，余额始终按全部有效记录计算', async () => {
   let fv = (await api.detail(reserve)).item.fundVersion

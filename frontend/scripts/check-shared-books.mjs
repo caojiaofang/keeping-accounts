@@ -33,32 +33,51 @@ check('主动创建示例才写入，重复打开不重复添加成员或账单'
   assert.equal(activeMembers(store.books.find(book => book.id === id)).length, 2)
   assert.equal(store.books.find(book => book.id === 'home').kind, undefined)
 })
-check('成员可看共用账本，只能维护本人账单；创建者可以维护所有共同账单', () => {
+check('有效成员和创建者都可维护全部共同账单，非成员和失效成员无权编辑', () => {
   const { book, entries } = familyExample(true)
   const mine = entries.find(entry => entry.createdBy === DEMO_USER_ID)
   const other = entries.find(entry => entry.createdBy !== DEMO_USER_ID)
   assert.ok(canWriteBook(book))
   assert.equal(canManageBook(book), false)
   assert.ok(canEditEntry(book, mine))
-  assert.equal(canEditEntry(book, other), false)
+  assert.ok(canEditEntry(book, other))
   assert.ok(canEditEntry(book, mine, 'demo-partner'))
+  assert.equal(canEditEntry(book, { ...other, bookId: 'another-book' }), false)
   assert.equal(canWriteBook(book, 'stranger'), false)
-  book.members.find(member => member.userId === DEMO_USER_ID).status = 'removed'
-  assert.equal(canEditEntry(book, mine), false)
+  assert.equal(canEditEntry(book, other, 'stranger'), false)
+  for (const status of ['removed', 'left']) {
+    book.members.find(member => member.userId === DEMO_USER_ID).status = status
+    assert.equal(canEditEntry(book, mine), false)
+    assert.equal(canEditEntry(book, other), false)
+  }
 })
-check('在 store 中拒绝越权修改、删除、预算设置，保留原始账单', () => {
+check('普通成员可修改、删除他人账单，保留记账人且仍不能管理账本', () => {
   const store = fresh()
   const id = store.openFamilyExample(true)
   const other = store.entries.find(entry => entry.bookId === id && entry.createdBy === 'demo-partner')
-  const original = JSON.stringify(other)
-  assert.equal(store.saveEntry({ ...other, amount: 1 }, other.id), false)
-  assert.equal(store.deleteEntry(other.id), false)
-  assert.equal(JSON.stringify(other), original)
+  assert.equal(store.saveEntry({ ...other, amount: 1 }, other.id), true)
+  assert.equal(store.entries.find(entry => entry.id === other.id).amount, 1)
+  assert.equal(store.entries.find(entry => entry.id === other.id).createdBy, 'demo-partner')
+  assert.equal(store.deleteEntry(other.id), true)
+  assert.equal(store.entries.some(entry => entry.id === other.id), false)
   const before = store.activeBook.budget
   assert.equal(store.updateBudget(1), false)
   assert.equal(store.activeBook.budget, before)
   assert.equal(store.removeMember(id, 'demo-partner'), false)
   assert.equal(store.createInvitation(id), undefined)
+})
+check('退出或移出的成员不能在 store 修改、删除共同账单', () => {
+  const store = fresh()
+  const id = store.openFamilyExample(true)
+  const book = store.books.find(book => book.id === id)
+  const other = store.entries.find(entry => entry.bookId === id && entry.createdBy === 'demo-partner')
+  for (const status of ['removed', 'left']) {
+    book.members.find(member => member.userId === DEMO_USER_ID).status = status
+    assert.equal(store.saveEntry({ ...other, amount: 1 }, other.id), false)
+    assert.equal(store.deleteEntry(other.id), false)
+    assert.equal(store.entries.find(entry => entry.id === other.id).amount, other.amount)
+  }
+  book.members.find(member => member.userId === DEMO_USER_ID).status = 'active'
 })
 check('新账单记录本人，编辑不改记账人，不允许把共同账单转移到个人账本', () => {
   const store = fresh()

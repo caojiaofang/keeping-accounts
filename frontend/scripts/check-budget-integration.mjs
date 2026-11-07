@@ -127,7 +127,7 @@ await check('真实双分页和后续停用保留全量余额、使用记录', a
   await savePlan(api, plan, 2, '2027-11'); assert.ok((await api.projects()).items.some(item => item.id === reserve))
   assert.equal((await api.detail(reserve)).entries.length, 20)
 })
-await check('共同成员只关联本人账单；跨账本和账号隔离', async () => {
+await check('共同成员可关联全部共同账单；预算管理、跨账本和账号隔离', async () => {
   const sharedId = config.books[1], shared = createBudgetApi(token, sharedId), plan = copy(config.plan)
   const groups = new Map(plan.groups.map(group => [group.id, randomUUID()]))
   plan.groups.forEach(group => { group.id = groups.get(group.id) }); plan.items.forEach(item => { item.id = randomUUID(); item.groupId = groups.get(item.groupId) })
@@ -135,9 +135,9 @@ await check('共同成员只关联本人账单；跨账本和账号隔离', asyn
   const member = storeFor(1, sharedId, 'shared'), itemId = plan.items[3].id
   assert.ok(await member.load()); const count = requests
   await member.write('fund', itemId, {}); assert.equal(requests, count); assert.match(member.error, /创建者/)
-  await member.write('setLink', other.id, {}); assert.equal(requests, count)
+  assert.ok(await member.write('setLink', other.id, { requestId: requestId(), entryVersion: 1, linkVersion: 0, itemId }))
   assert.ok(await member.write('setLink', own.id, { requestId: requestId(), entryVersion: 1, linkVersion: 0, itemId }))
-  assert.equal((await shared.detail(itemId)).balance.availableAmount, -1000)
+  assert.equal((await shared.detail(itemId)).balance.availableAmount, -3000)
   await assert.rejects(createBudgetApi('user-2', sharedId).plan(), e => e.status === 404)
   await assert.rejects(shared.detail(saving), e => e.status === 404)
   store = storeFor(2, config.books[2]); assert.ok(await store.load()); assert.equal(store.month.state, 'not_set')

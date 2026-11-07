@@ -262,7 +262,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     if (id) {
       const index = entries.value.findIndex(item => item.id === id)
       if (index < 0) { toast('这笔账单不存在'); return false }
-      if (!canEditEntry(books.value.find(book => book.id === entries.value[index].bookId), entries.value[index])) { toast('只能修改自己记录的账单'); return false }
+      if (!canEditEntry(books.value.find(book => book.id === entries.value[index].bookId), entries.value[index])) { toast('你已无权修改这个账本的账单'); return false }
       if (entry.version !== undefined && entry.version !== (entries.value[index].version || 1)) { toast('账单已变化，请重新读取后修改'); return false }
       if (entries.value[index].bookId !== entry.bookId && (targetBook?.kind === 'shared' || books.value.find(book => book.id === entries.value[index].bookId)?.kind === 'shared')) { toast('多人账本的账单不能转移到其他账本'); return false }
       entries.value[index] = { ...entries.value[index], ...entry, version: (entries.value[index].version || 1) + 1, createdBy: entries.value[index].createdBy }
@@ -281,7 +281,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     if (accountId.value) return cloudWrite(token => apiRequest(`/api/v1/entries/${id}?version=${expectedVersion ?? entry.version}`, { method: 'DELETE', token }), () => {
       entries.value = entries.value.filter(item => item.id !== id)
     })
-    if (!canEditEntry(books.value.find(book => book.id === entry.bookId), entry)) { toast('只能删除自己记录的账单'); return false }
+    if (!canEditEntry(books.value.find(book => book.id === entry.bookId), entry)) { toast('你已无权删除这个账本的账单'); return false }
     entries.value = entries.value.filter(entry => entry.id !== id)
     persist()
     return true

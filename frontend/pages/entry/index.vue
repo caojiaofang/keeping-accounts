@@ -53,7 +53,7 @@ async function edit() {
         <view v-if="book.kind === 'shared'" class="row"><text>记账人</text><text>{{ entryAuthor(book, entry) }}</text></view>
         <view class="note"><text class="scope">备注</text><text selectable>{{ entry.note || '未填写备注' }}</text></view>
         <text class="hint">这里显示当前账单，可能与历史回答中的统计快照不同。</text>
-        <button v-if="editable" class="edit" :disabled="loading" @tap="edit">编辑这笔账单</button><text v-else class="hint">共同账单可查看；只有本人或账本创建者可以修改。</text>
+        <button v-if="editable" class="edit" :disabled="loading" @tap="edit">编辑这笔账单</button><text v-else class="hint">你已无权修改这个账本的账单，请刷新后重试。</text>
       </view>
     </view></scroll-view>
   </view>

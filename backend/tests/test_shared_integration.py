@@ -232,16 +232,39 @@ async def roundtrip():
                                 expected=404,
                             )
                             owner_input = {k: v for k, v in payloads[0].items() if k != "id"}
+                            modified_owner = await request(
+                                "PUT",
+                                f"/entries/{entries[0]}",
+                                {**owner_input, "version": 1, "note": "家人修改了早餐备注"},
+                                who=1,
+                            )
+                            assert modified_owner["createdBy"] == str(users[0])
+                            assert modified_owner["updatedBy"] == str(users[1])
+                            assert modified_owner["version"] == 2
                             await request(
                                 "PUT",
                                 f"/entries/{entries[0]}",
                                 {**owner_input, "version": 1},
-                                who=1,
-                                expected=403,
+                                expected=409,
                             )
                             await request(
-                                "DELETE", f"/entries/{entries[0]}?version=1", who=1, expected=403
+                                "PUT",
+                                f"/entries/{entries[0]}",
+                                {**owner_input, "version": 2},
+                                who=2,
+                                expected=404,
                             )
+                            await request(
+                                "DELETE", f"/entries/{entries[0]}?version=2", who=2, expected=404
+                            )
+                            await request(
+                                "POST",
+                                f"/books/{book_id}/close",
+                                {"version": (await current())["version"]},
+                                who=1,
+                                expected=404,
+                            )
+                            assert (await current())["id"] == str(book_id)
                             await request(
                                 "PUT",
                                 f"/books/{book_id}/budget",
@@ -300,10 +323,26 @@ async def roundtrip():
                             ]
                             assert edits[0]["payload"]["before"]["amount"] == 1250
                             assert edits[0]["payload"]["after"]["amount"] == 1600
+                            member_edits = [
+                                a
+                                for a in activities
+                                if a["action"] == "update_entry"
+                                and a["targetId"] == str(entries[0])
+                            ]
+                            assert member_edits[0]["actorId"] == str(users[1])
+                            assert member_edits[0]["payload"]["before"]["note"] == "共同早餐"
+                            assert member_edits[0]["payload"]["after"]["createdBy"] == str(users[0])
                             await request(
                                 "PUT",
                                 f"/entries/{entries[0]}",
-                                {**owner_input, "bookId": personal[0], "version": 1},
+                                {**owner_input, "bookId": personal[0], "version": 2},
+                                expected=422,
+                            )
+                            await request(
+                                "PUT",
+                                f"/entries/{entries[0]}",
+                                {**owner_input, "bookId": personal[1], "version": 2},
+                                who=1,
                                 expected=422,
                             )
                             await request(
@@ -334,6 +373,34 @@ async def roundtrip():
                             await request(
                                 "GET", f"/assistant/conversations/{conversation}", expected=404
                             )
+                            await request(
+                                "DELETE", f"/entries/{entries[0]}?version=1", who=1, expected=409
+                            )
+                            for _ in range(2):
+                                await request(
+                                    "DELETE",
+                                    f"/entries/{entries[0]}?version=2",
+                                    who=1,
+                                    expected=204,
+                                )
+                            deleted = (
+                                await connection.execute(
+                                    select(
+                                        LedgerEntry.is_deleted,
+                                        LedgerEntry.version,
+                                        LedgerEntry.created_by,
+                                        LedgerEntry.updated_by,
+                                    ).where(LedgerEntry.id == entries[0])
+                                )
+                            ).one()
+                            assert deleted.is_deleted and deleted.version == 3
+                            assert deleted.created_by == users[0] and deleted.updated_by == users[1]
+                            activities = await request("GET", f"/books/{book_id}/activities", who=1)
+                            deletions = [a for a in activities if a["action"] == "delete_entry"]
+                            assert len(deletions) == 1
+                            assert deletions[0]["actorId"] == str(users[1])
+                            assert deletions[0]["payload"]["before"]["createdBy"] == str(users[0])
+                            assert len((await request("GET", "/ledger", who=1))["entries"]) == 1
                             second = await invite(True)
                             await preview(first["token"], 410)
                             await connection.execute(
@@ -395,6 +462,9 @@ async def roundtrip():
                                 expected=404,
                             )
                             await request(
+                                "DELETE", f"/entries/{entries[1]}?version=3", who=1, expected=404
+                            )
+                            await request(
                                 "POST",
                                 "/assistant/parse",
                                 {"text": "早餐8元", "bookId": str(book_id)},
@@ -406,7 +476,7 @@ async def roundtrip():
                                 b["id"] == str(book_id)
                                 for b in (await request("GET", "/ledger", who=1))["books"]
                             )
-                            assert len((await request("GET", "/ledger"))["entries"]) == 2
+                            assert len((await request("GET", "/ledger"))["entries"]) == 1
                             fourth = await invite(True)
                             await request(
                                 "POST",

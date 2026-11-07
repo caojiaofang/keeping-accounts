@@ -47,7 +47,7 @@ onLoad(async (options) => {
   }
   const entry = store.entries.find(item => item.id === options.id)
   if (!entry) { goBack(); toast('这笔账单不存在'); return }
-  if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) { goBack(); toast('你可以查看共同账单，只有本人或创建者可以修改'); return }
+  if (!canEditEntry(store.books.find(book => book.id === entry.bookId), entry)) { goBack(); toast('你已无权修改这个账本的账单'); return }
   editingId.value = entry.id
   editingVersion.value = entry.version
   type.value = entry.type

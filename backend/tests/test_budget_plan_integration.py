@@ -72,7 +72,7 @@ async def local_api():
                 config = Config(str(BACKEND_DIR / "alembic.ini"), stdout=StringIO())
                 config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
                 config.attributes["connection"] = sync_connection
-                command.upgrade(config, "0006_budget")
+                command.upgrade(config, "head")
 
             await connection.run_sync(migrate)
         created = True
