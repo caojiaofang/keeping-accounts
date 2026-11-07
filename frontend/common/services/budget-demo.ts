@@ -142,6 +142,46 @@ export function createBudgetDemo(bookId: string, entries: () => Entry[], persist
       return { schemaVersion: 1, bookId, version: state.plan.version, revision }
     },
     month,
+    monthly: (key: string) => {
+      const value = month(key)
+      return value.state === 'preview' ? { ...value, state: 'not_set', sourceRevisionId: null, plan: null, totals: null } : value
+    },
+    saveMonthly: (key: string, body: B.SaveMonthlyBudget) => {
+      if (key < monthNow()) fail('不能编辑过去月份', 422)
+      version(state.snapshots[key]?.version || 0, body.version)
+      if (body.plan.items.length > 200 || body.plan.groups.length > 20) fail('预算项目或分组过多', 422)
+      const groupIds = new Set(body.plan.groups.map(g => g.id)), ids = new Set(body.plan.items.map(i => i.id))
+      if (ids.size !== body.plan.items.length || groupIds.size !== body.plan.groups.length || body.plan.groups.some(g => !g.name.trim() || g.name.length > 24)) fail('预算分组或项目不合法', 422)
+      money(body.plan.plannedIncome)
+      for (const item of body.plan.items) {
+        money(item.monthlyAmount)
+        if (!item.name.trim() || item.name.length > 24 || !groupIds.has(item.groupId)) fail('请填写项目名称并选择分组', 422)
+        if (state.projects[item.id] && state.projects[item.id].kind !== item.kind) fail('已有项目性质不能更改')
+      }
+      for (const entry of entries().filter(e => e.bookId === bookId && e.date.startsWith(key))) {
+        const link = state.links[entry.id]
+        if (link && !link.isDeleted && !ids.has(link.itemId)) handlers.removeLink(entry.id, { entryVersion: entry.version || 1, linkVersion: link.version })
+      }
+      state.plan.version++
+      for (const item of body.plan.items) state.projects[item.id] = { id: item.id, kind: item.kind, status: 'active', enabledMonth: state.projects[item.id]?.enabledMonth || key, fundVersion: state.projects[item.id]?.fundVersion || 0, configuration: clone(item) }
+      state.bases[key] = clone(body.plan)
+      state.snapshots[key] = { schemaVersion: 1, bookId, month: key, planVersion: state.plan.version, state: 'confirmed', snapshotId: state.snapshots[key]?.snapshotId || newId(), sourceRevisionId: newId(), version: body.version + 1, plan: clone(body.plan), totals: budgetTotals(body.plan), override: { plannedIncome: null, itemAmounts: [] }, generatedAt: Date.now() }
+      return state.snapshots[key]
+    },
+    deleteMonthly: (key: string, body: B.DeleteMonthlyBudget) => {
+      if (key < monthNow()) fail('不能删除过去月份的预算', 422)
+      const value = month(key)
+      if (value.state !== 'confirmed') fail('月预算已删除或未设置')
+      version(value.version, body.version)
+      for (const entry of entries().filter(e => e.bookId === bookId && e.date.startsWith(key))) {
+        const link = state.links[entry.id]
+        if (link && !link.isDeleted) handlers.removeLink(entry.id, { entryVersion: entry.version || 1, linkVersion: link.version })
+      }
+      state.plan.version++
+      state.snapshots[key] = { ...value, state: 'not_set', version: value.version + 1, planVersion: state.plan.version, snapshotId: null, sourceRevisionId: null, plan: null, totals: null, override: { plannedIncome: null, itemAmounts: [] }, generatedAt: Date.now() }
+      return state.snapshots[key]
+    },
+    monthlyExecution: (key: string) => handlers.execution(key, true),
     confirm: (key: string, body: B.ConfirmBudgetMonth) => { version(state.plan.version, body.planVersion); if (month(key).sourceRevisionId !== body.sourceRevisionId) fail('来源已变化'); return confirm(key) },
     updateMonth: (key: string, body: B.UpdateBudgetMonth) => {
       if (key < monthNow()) fail('不能编辑过去月份')
@@ -226,8 +266,8 @@ export function createBudgetDemo(bookId: string, entries: () => Entry[], persist
       return handlers.link(entryId)
     },
     entries: (key: string, options: { itemId?: string; unlinkedOnly?: boolean; beforeEntryId?: string } = {}) => entryPage(options.itemId, key, options.unlinkedOnly, options.beforeEntryId),
-    execution: (key: string) => {
-      const budget = month(key), bills = entries().filter(e => e.bookId === bookId && e.type === 'expense' && e.date.startsWith(key)), expenseTotal = bills.reduce((n, e) => n + e.amount, 0)
+    execution: (key: string, snapshotOnly = false) => {
+      const budget = (snapshotOnly ? handlers.monthly(key) : month(key)) as B.BudgetMonthResponse, bills = entries().filter(e => e.bookId === bookId && e.type === 'expense' && e.date.startsWith(key)), expenseTotal = bills.reduce((n, e) => n + e.amount, 0)
       const linkedExpenseTotal = bills.filter(e => state.links[e.id] && !state.links[e.id].isDeleted).reduce((n, e) => n + e.amount, 0)
       const items = Object.values(state.projects).filter(p => budget.plan?.items.some(i => i.id === p.id) || recordList(p.id).some(r => r.date.startsWith(key)) || bills.some(e => state.links[e.id]?.itemId === p.id && !state.links[e.id].isDeleted)).map(p => {
         const item = budget.plan?.items.find(i => i.id === p.id), spent = bills.filter(e => state.links[e.id]?.itemId === p.id && !state.links[e.id].isDeleted).reduce((n, e) => n + e.amount, 0), records = recordList(p.id).filter(r => r.date.startsWith(key))

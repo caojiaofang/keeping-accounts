@@ -6,10 +6,10 @@ import type { BudgetApi } from '@/common/api/budget'
 import { createBudgetDemo } from '@/common/services/budget-demo'
 import type * as B from '@/common/types/budget'
 import type { Book, Entry } from '@/common/types'
-import { canManageBook, canEditEntry } from '@/common/services/shared-books'
+import { canManageBook, canEditEntry, canWriteBook } from '@/common/services/shared-books'
 import { newId } from '@/common/utils/id'
 
-type WriteMethod = 'savePlan' | 'confirm' | 'updateMonth' | 'equalize' | 'fund' | 'correctFund' | 'createGoal' | 'updateGoal' | 'setLink' | 'removeLink'
+type WriteMethod = 'deleteMonthly' | 'saveMonthly' | 'savePlan' | 'confirm' | 'updateMonth' | 'equalize' | 'fund' | 'correctFund' | 'createGoal' | 'updateGoal' | 'setLink' | 'removeLink'
 type ReadMethod = Exclude<keyof BudgetApi, WriteMethod>
 interface Context { accountId: string | null; token: string; book: Book; month: string; ready: boolean }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
@@ -25,6 +25,19 @@ export const useBudgetStore = defineStore('budget', () => {
   let connectedKey = ''
   let pending: { method: WriteMethod; args: unknown[]; key: string } | undefined
   const demoSources = new Map<string, BudgetApi>()
+  function apiForBook(book: Book): BudgetApi {
+    if (context?.accountId) {
+      if (!context.token || !context.ready) throw new Error('请先连接云端账本')
+      return createBudgetApi(context.token, book.id)
+    }
+    const key = `moji-budget-demo-v1:${book.id}`
+    if (!demoSources.has(key)) {
+      let saved: unknown
+      try { saved = uni.getStorageSync(key) } catch { /* 无缓存时从空体验预算开始。 */ }
+      demoSources.set(key, createBudgetDemo(book.id, () => entries(), value => uni.setStorageSync(key, clone(value)), saved))
+    }
+    return demoSources.get(key)!
+  }
   function clear() { plan.value = null; month.value = null; execution.value = null; detail.value = null; projects.value = null }
   function invalidate() { epoch++; readRevision++; detailRevision++; reads = 0; loading.value = false; writing.value = false; clear() }
   function scopeKey(c: Context) { return JSON.stringify([API_BASE_URL, c.accountId, c.token, c.book, c.month, c.ready]) }
@@ -53,9 +66,9 @@ export const useBudgetStore = defineStore('budget', () => {
     reads++; loading.value = true
     try {
       const result = await (api[method] as (...values: unknown[]) => Promise<unknown>)(...args)
-      if (['plan', 'month', 'execution', 'projects', 'detail', 'link', 'entries'].includes(method)) {
+      if (['plan', 'month', 'monthly', 'execution', 'monthlyExecution', 'projects', 'detail', 'link', 'entries'].includes(method)) {
         const value = result as { schemaVersion?: number; bookId?: string; month?: string }
-        if (!value || value.schemaVersion !== 1 || value.bookId !== context?.book.id || (['month', 'execution'].includes(method) && value.month !== args[0])) { if (generation === epoch) clear(); throw new Error('预算响应归属不正确，请重新读取') }
+        if (!value || value.schemaVersion !== 1 || value.bookId !== context?.book.id || (['month', 'monthly', 'execution', 'monthlyExecution'].includes(method) && value.month !== args[0])) { if (generation === epoch) clear(); throw new Error('预算响应归属不正确，请重新读取') }
       }
       return generation === epoch ? result as Awaited<ReturnType<BudgetApi[K]>> : undefined
     } catch (cause) {
@@ -68,7 +81,7 @@ export const useBudgetStore = defineStore('budget', () => {
     if (!c) return false
     const generation = epoch, revision = ++readRevision
     error.value = ''
-    const values = await Promise.all([query('plan'), query('month', c.month), query('execution', c.month), query('projects')])
+    const values = await Promise.all([query('plan'), query('monthly', c.month), query('monthlyExecution', c.month), query('projects')])
     if (generation !== epoch || revision !== readRevision || values.some(v => v === undefined)) return false
     ;[plan.value, month.value, execution.value, projects.value] = values as [B.BudgetPlanResponse, B.BudgetMonthResponse, B.BudgetMonthExecution, B.BudgetProjectPage]
     conflict.value = false; refreshError.value = ''
@@ -83,8 +96,9 @@ export const useBudgetStore = defineStore('budget', () => {
   async function execute(method: WriteMethod, args: unknown[]) {
     if (!context || !source || writing.value) return undefined
     const isLink = method === 'setLink' || method === 'removeLink'
+    const isMonthly = method === 'saveMonthly' || method === 'deleteMonthly'
     const entry = isLink ? entries().find(e => e.id === args[0] && e.bookId === context!.book.id) : undefined
-    if (isLink ? !entry || !canEditEntry(context.book, entry) : !canManageBook(context.book)) { error.value = isLink ? '只能关联有权编辑的账单' : '只有账本创建者可以修改预算'; return undefined }
+    if (isLink ? !entry || !canEditEntry(context.book, entry) : isMonthly ? !canWriteBook(context.book) : !canManageBook(context.book)) { error.value = isLink ? '只能关联有权编辑的账单' : isMonthly ? '只有有效账本成员可以管理月预算' : '只有账本创建者可以修改预算'; return undefined }
     const c = context, generation = ++epoch, key = scopeKey(c), api = source, item = detail.value?.item.id
     reads = 0; loading.value = false; readRevision++
     pending = { method, args: clone(args), key }; pendingMethod.value = method; retryAvailable.value = false
@@ -124,5 +138,5 @@ export const useBudgetStore = defineStore('budget', () => {
     if (wasLoaded && !writing.value) void load().then(() => item ? loadDetail(item) : undefined)
   }
   function resetDemo() { demoSources.clear(); if (context && !context.accountId) { uni.removeStorageSync(`moji-budget-demo-v1:${context.book.id}`); const c = context; context = undefined; connect(c, entries) } }
-  return { plan, month, execution, detail, projects, loading, writing, error, refreshError, conflict, notice, retryAvailable, pendingMethod, connect, invalidate, load, loadDetail, query, write, retry, ledgerChanged, resetDemo, newRequestId: newId }
+  return { plan, month, execution, detail, projects, loading, writing, error, refreshError, conflict, notice, retryAvailable, pendingMethod, connect, invalidate, load, loadDetail, query, write, retry, ledgerChanged, resetDemo, apiForBook, newRequestId: newId }
 })

@@ -11,7 +11,7 @@ import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
 import { toast } from '@/common/utils/format'
-import { entryAuthor, canManageBook } from '@/common/services/shared-books'
+import { entryAuthor } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 const auth = useAuthStore()
@@ -30,15 +30,12 @@ const nickname = computed(() => {
 })
 const nicknameOpen = ref(false)
 watch(() => auth.user?.id, () => { nicknameOpen.value = false })
-const budgetOpen = ref(false)
-const budgetVersion = ref<number>()
-watch(budgetOpen, open => { if (open) budgetVersion.value = store.activeBook.version })
 const categoriesOpen = ref(false)
 const categoryType = ref<'expense' | 'income'>('expense')
 const visibleCategories = computed(() => categories.filter(category => category.type === categoryType.value))
 const recordedDays = computed(() => new Set(store.entries.map(entry => entry.date)).size)
 const menuGroups = [
-  [{ key: 'family-budget', title: '家庭预算', icon: 'home', description: '提前安排缴费、预留和储蓄' }, { key: 'categories', title: '收支分类', icon: 'tag', description: '生活里的各种小事' }, { key: 'export', title: '导出账单', icon: 'export', description: '复制当前账本的 CSV 数据' }],
+  [{ key: 'family-budget', title: '月度预算', icon: 'home', description: '每月额度、剩余与超支' }, { key: 'categories', title: '收支分类', icon: 'tag', description: '生活里的各种小事' }, { key: 'export', title: '导出账单', icon: 'export', description: '复制当前账本的 CSV 数据' }],
   [{ key: 'help', title: '使用帮助', icon: 'help', description: '' }, { key: 'privacy', title: '数据与隐私', icon: 'shield', description: '' }, { key: 'about', title: '关于墨记', icon: 'info', description: 'v0.1.0' }],
 ]
 async function saveNickname(value: string) {
@@ -48,13 +45,7 @@ async function saveNickname(value: string) {
     toast('昵称已保存到云端')
   } catch (cause) { toast(cause instanceof Error ? cause.message : '昵称保存失败，请重试') }
 }
-function openBudget() { if (!canManageBook(store.activeBook)) return toast('只有账本创建者可以设置共同预算'); budgetOpen.value = true }
-async function saveBudget(value: string) {
-  if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  if (!await store.updateBudget(Math.round(Number(value) * 100), budgetVersion.value)) return
-  budgetOpen.value = false
-  toast('月预算已更新')
-}
+
 function exportEntries() {
   if (!store.bookEntries.length) return toast('当前账本还没有账单可导出')
   const cell = (value: string) => `"${value.replace(/"/g, '""')}"`
@@ -108,7 +99,7 @@ function logout() {
     <button v-if="store.legacyEntries.length" class="local-notice" @tap="exportLegacyEntries">升级前有 {{ store.legacyEntries.length }} 笔本机记录，尚未上传。点击导出 CSV</button>
     <button class="profile-card" @tap="openAccount"><view class="avatar"><AppIcon name="leaf" :size="57" /><view class="avatar-dot" /></view><view class="profile-info"><view class="nickname">{{ auth.user ? nickname : '登录墨记' }}</view><view class="profile-caption">{{ auth.user ? '今天，也要好好照顾自己。' : '可自愿登录，使用云端账本与同步' }}</view><view class="local-badge"><view class="badge-dot" />{{ auth.user ? '微信已登录 · 个人账本使用云端' : '正在体验本地记账' }}</view></view><AppIcon :name="auth.user ? 'edit' : 'chevron'" :size="30" /></button>
     <view class="personal-stats panel"><view><text class="stat-value number">{{ recordedDays }}<text class="stat-unit"> 天</text></text><text class="stat-label">记过账的日子</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.entries.length }}<text class="stat-unit"> 笔</text></text><text class="stat-label">认真记录的生活</text></view><view class="stat-divider" /><view><text class="stat-value number">{{ store.books.length }}<text class="stat-unit"> 本</text></text><text class="stat-label">专属生活账本</text></view></view>
-    <FamilyBudgetCard @legacy="openBudget" />
+    <FamilyBudgetCard />
     <view v-for="(group, index) in menuGroups" :key="index" class="menu-panel panel"><button v-for="item in group" :key="item.key" class="menu-row" @tap="menuAction(item.key)"><view class="menu-icon"><AppIcon :name="item.icon" :size="35" /></view><view class="menu-copy"><text class="menu-title">{{ item.title }}</text><text v-if="item.description && item.key !== 'about'" class="menu-description">{{ item.description }}</text></view><text v-if="item.key === 'about'" class="version-label">{{ item.description }}</text><AppIcon name="chevron" :size="25" /></button></view>
     <view class="local-notice"><AppIcon name="shield" :size="25" /><text>{{ auth.user ? '个人账本按账号保存在云端，体验数据不会自动上传' : '当前为体验模式，演示数据不会转入登录账号' }}</text></view>
     <button v-if="auth.user" class="logout-button" :disabled="auth.busy" :loading="auth.loggingOut" @tap="logout">退出登录</button>
@@ -116,7 +107,6 @@ function logout() {
     <view class="brand-footer"><text class="footer-brand">墨记</text><text>把日子，一笔一笔记好。</text></view>
     <BottomNav active="profile" />
     <PromptSheet :open="nicknameOpen" title="怎么称呼你" description="保存后会同步到账号，下次登录继续使用" placeholder="输入昵称" :initial="nickname" :maxlength="12" :loading="auth.savingNickname" @close="nicknameOpen = false" @confirm="saveNickname" />
-    <PromptSheet :open="budgetOpen" title="设置月预算" :description="`正在设置「${store.activeBook.name}」的每月预算`" placeholder="输入预算金额（元）" :initial="String(store.activeBook.budget / 100)" numeric :maxlength="10" @close="budgetOpen = false" @confirm="saveBudget" />
     <view v-if="categoriesOpen" class="sheet-mask" @tap="categoriesOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">收支分类</text><button class="icon-button" aria-label="关闭分类" @tap="categoriesOpen = false"><AppIcon name="close" :size="34" /></button></view><view class="category-toggle"><button :class="{ active: categoryType === 'expense' }" @tap="categoryType = 'expense'">支出分类</button><button :class="{ active: categoryType === 'income' }" @tap="categoryType = 'income'">收入分类</button></view><scroll-view scroll-y style="max-height: 50vh;"><view class="category-list"><view v-for="category in visibleCategories" :key="category.id" class="category-item"><view :style="{ background: category.color }"><AppIcon :name="category.icon" :size="39" /></view><text>{{ category.name }}</text></view></view></scroll-view><view class="footnote">让生活的小事，各有所属</view></view></view>
   </view>
 </template>

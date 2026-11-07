@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLedgerStore } from '@/store/ledger'
+import { useBudgetStore } from '@/store/budget'
+import type { BudgetItemExecution } from '@/common/types/budget'
 import { categories } from '@/common/data/categories'
 import { localDate, toast } from '@/common/utils/format'
 import { isCalendarDate } from '@/common/services/expense-calendar'
@@ -26,6 +28,32 @@ const accounts = ['微信', '支付宝', '银行卡', '现金']
 const account = ref('微信')
 const saving = ref(false)
 const requestId = newId()
+const budget = useBudgetStore(), budgetItems = ref<BudgetItemExecution[]>([]), budgetItemId = ref(''), budgetLinkVersion = ref(0)
+const budgetLoading = ref(false), budgetError = ref(''), initialized = ref(false)
+let budgetGeneration = 0
+let selectionLoaded = false
+const budgetChoices = computed(() => [{ id: '', name: '不关联预算' }, ...budgetItems.value.map(i => ({ id: i.itemId, name: `${i.name}（${(i.remainingAmount || 0) < 0 ? '已超' : '剩余'} ¥${(Math.abs(i.remainingAmount || 0) / 100).toFixed(2)}）` }))])
+async function loadBudget(preferred?: string) {
+  const current = ++budgetGeneration
+  budgetLoading.value = true; budgetError.value = ''; budgetItems.value = []
+  try {
+    const api = budget.apiForBook(activeBook.value)
+    const original = originalEntry.value
+    const [execution, link] = await Promise.all([
+      type.value === 'expense' ? api.monthlyExecution(date.value.slice(0, 7)) : Promise.resolve(null),
+      original ? budget.apiForBook(store.books.find(b => b.id === original.bookId)!).link(original.id) : Promise.resolve(null),
+    ])
+    if (current !== budgetGeneration) return
+    budgetLinkVersion.value = link?.linkVersion || 0
+    budgetItems.value = execution?.items.filter(i => i.inPlan) || []
+    const selected = preferred ?? (selectionLoaded ? budgetItemId.value : link?.link && !link.link.isDeleted ? link.link.itemId : '')
+    budgetItemId.value = budgetItems.value.some(i => i.itemId === selected) ? selected : ''
+    selectionLoaded = true
+  } catch (cause) { if (current === budgetGeneration) budgetError.value = cause instanceof Error ? cause.message : '预算读取失败，请重试' }
+  finally { if (current === budgetGeneration) budgetLoading.value = false }
+}
+watch(() => [bookId.value, date.value.slice(0, 7), type.value], () => { if (initialized.value) void loadBudget() }, { flush: 'sync' })
+watch(() => store.accountId, () => { budgetGeneration++; budgetLoading.value = false; budgetError.value = '账号已变化，请返回明细后重新打开记账' }, { flush: 'sync' })
 const originalEntry = computed(() => store.entries.find(entry => entry.id === editingId.value))
 const recordedBy = computed(() => originalEntry.value ? entryAuthor(store.books.find(book => book.id === originalEntry.value!.bookId), originalEntry.value) : '我')
 const visibleCategories = computed(() => categories.filter(category => category.type === type.value))
@@ -35,8 +63,11 @@ const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 onLoad(async (options) => {
   if (store.accountId && !store.cloudReady) { goBack(); toast('请先在明细页连接云端账本后再记账'); return }
   if (!options?.id) {
+    if (options?.bookId && store.books.some(b => b.id === options.bookId)) bookId.value = options.bookId
     if (options?.date && isCalendarDate(options.date)) date.value = options.date
     if (options?.type === 'income') changeType('income')
+    initialized.value = true
+    await loadBudget(options?.budgetItemId || '')
     return
   }
   if (options.fromChat === '1') {
@@ -58,6 +89,8 @@ onLoad(async (options) => {
   time.value = entry.time || ''
   bookId.value = entry.bookId
   account.value = entry.account
+  initialized.value = true
+  await loadBudget()
 })
 
 function changeType(value: EntryType) {
@@ -82,11 +115,12 @@ function goBack() {
 }
 function openQuickRecord() { uni.navigateTo({ url: '/pages/assistant/index?mode=record' }) }
 async function save() {
-  if (saving.value) return
+  if (saving.value || budgetLoading.value) return
+  if (budgetError.value) return toast('请先重试读取预算，避免覆盖已有预算关联')
   const cents = Math.round(Number(amount.value) * 100)
   if (!Number.isFinite(cents) || cents <= 0) return toast('请输入大于 0 的金额')
   saving.value = true
-  const saved = await store.saveEntry({ version: editingVersion.value, type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value }, editingId.value || undefined, requestId)
+  const saved = await store.saveEntry({ version: editingVersion.value, type: type.value, categoryId: categoryId.value, amount: cents, note: note.value.trim(), date: date.value, time: time.value || undefined, bookId: bookId.value, account: account.value, budgetItemId: type.value === 'expense' ? budgetItemId.value || null : null, budgetLinkVersion: budgetLinkVersion.value }, editingId.value || undefined, requestId)
   if (!saved) { saving.value = false; return }
   goBack()
   toast(store.accountId ? '已保存到云端' : store.storageAvailable ? (editingId.value ? '账单已更新' : '已记下这一笔') : '已记下，本地空间不足，仅本次运行保留')
@@ -118,6 +152,9 @@ function remove() {
           <picker :range="accounts" :value="accounts.indexOf(account)" @change="changeAccount"><view class="form-row"><AppIcon name="wallet" :size="33" /><text class="form-label">账户</text><text class="form-value">{{ account }}</text><AppIcon name="chevron" :size="23" /></view></picker>
           <picker :range="store.books" range-key="name" :value="store.books.findIndex(book => book.id === bookId)" :disabled="!!editingId && activeBook.kind === 'shared'" @change="changeBook"><view class="form-row"><AppIcon name="book" :size="33" /><text class="form-label">账本</text><text class="form-value">{{ activeBook.name }}</text><AppIcon v-if="!editingId || activeBook.kind !== 'shared'" name="chevron" :size="23" /></view></picker>
           <view v-if="activeBook.kind === 'shared'" class="form-row"><AppIcon name="user" :size="33" /><text class="form-label">记账人</text><text class="form-value">{{ recordedBy }}</text></view>
+          <picker v-if="type === 'expense'" :range="budgetChoices" range-key="name" :value="Math.max(0, budgetChoices.findIndex(i => i.id === budgetItemId))" :disabled="budgetLoading || saving || !!budgetError" @change="budgetItemId = budgetChoices[Number($event.detail.value)].id"><view class="form-row"><AppIcon name="wallet" :size="33" /><text class="form-label">预算项目</text><text class="form-value">{{ budgetLoading ? '正在读取…' : budgetChoices.find(i => i.id === budgetItemId)?.name || '不关联预算' }}</text><AppIcon name="chevron" :size="23" /></view></picker>
+          <view v-if="budgetError" class="budget-message"><text>{{ budgetError }}</text><button :disabled="budgetLoading || saving" @tap="loadBudget()">重试读取预算</button></view>
+          <text v-else-if="type === 'expense' && !budgetLoading && !budgetItems.length" class="budget-message">{{ date.slice(0, 7) }} 未设置支出预算，可先在月度预算中添加项目。</text>
         </view>
       </view>
     </scroll-view>
@@ -127,6 +164,7 @@ function remove() {
 
 <style scoped lang="scss">
 .record-page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: #f6f8f7; }
+.budget-message { display: block; color: #71877a; font-size: 23rpx; line-height: 1.7; padding: 16rpx 0; }.budget-message button { color: #285e4e; font-size: 24rpx; padding: 14rpx 0; text-align: left; }
 .record-header { padding: 0 36rpx; flex-shrink: 0; }
 .record-scroll { flex: 1; min-height: 0; height: 0; }
 .record-content { padding: 0 36rpx 28rpx; }

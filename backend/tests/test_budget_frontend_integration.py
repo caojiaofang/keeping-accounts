@@ -64,7 +64,7 @@ async def frontend_case(clock):
                 result = output.decode("utf-8", errors="replace")
                 print(result)
                 assert process.returncode == 0, result[-6000:]
-                assert "真实 HTTP / PostgreSQL 联调：8 组通过" in result
+                assert "真实 HTTP / PostgreSQL 联调：9 组通过" in result
             finally:
                 if process is not None and process.returncode is None:
                     process.kill()

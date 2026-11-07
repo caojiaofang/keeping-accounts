@@ -28,6 +28,7 @@ from app.schemas.budget import (
     CorrectBudgetFund,
     CreateBudgetFund,
     CreateBudgetGoal,
+    DeleteMonthlyBudget,
     PreviewBudgetEqualization,
     PreviewBudgetRevision,
     RemoveBudgetEntryLink,
@@ -35,6 +36,7 @@ from app.schemas.budget import (
     SavedBudgetFund,
     SavedBudgetGoal,
     SavedBudgetRevision,
+    SaveMonthlyBudget,
     SetBudgetEntryLink,
     UpdateBudgetGoal,
     UpdateBudgetMonth,
@@ -90,6 +92,44 @@ def get_budget_execution_service(service: Budget) -> BudgetExecutionService:
 
 
 ExecutionBudget = Annotated[BudgetExecutionService, Depends(get_budget_execution_service)]
+
+
+@router.get(
+    "/monthly/{month}",
+    response_model=BudgetMonthResponse,
+    summary="读取独立月预算，未设置月份不自动沿用",
+)
+async def read_monthly(book_id: UUID, month: BudgetMonthKey, service: MonthBudget):
+    return await service.read_month(book_id, month, snapshot_only=True)
+
+
+@router.put(
+    "/monthly/{month}", response_model=BudgetMonthResponse, summary="成员共同新增或修改该月完整预算"
+)
+async def save_monthly(
+    book_id: UUID, month: BudgetMonthKey, body: SaveMonthlyBudget, service: MonthBudget
+):
+    return await service.save_monthly(book_id, month, body)
+
+
+@router.delete(
+    "/monthly/{month}",
+    response_model=BudgetMonthResponse,
+    summary="有效成员删除该月预算，保留原账单",
+)
+async def delete_monthly(
+    book_id: UUID, month: BudgetMonthKey, body: DeleteMonthlyBudget, service: MonthBudget
+):
+    return await service.delete_monthly(book_id, month, body)
+
+
+@router.get(
+    "/monthly/{month}/execution",
+    response_model=BudgetMonthExecution,
+    summary="独立月预算已用、剩余与超支",
+)
+async def monthly_execution(book_id: UUID, month: BudgetMonthKey, service: ExecutionBudget):
+    return await service.month_execution(book_id, month, snapshot_only=True)
 
 
 @router.get("/plan", response_model=BudgetPlanResponse, summary="读取当前账本预算方案及生效版本")

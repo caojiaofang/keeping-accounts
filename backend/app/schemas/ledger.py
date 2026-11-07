@@ -91,11 +91,16 @@ class EntryInput(LedgerSchema):
         return self
 
 
-class CreateEntry(EntryInput):
+class BudgetEntrySelection(LedgerSchema):
+    budget_item_id: UUID | None = None
+    budget_link_version: int = Field(default=0, strict=True, ge=0)
+
+
+class CreateEntry(EntryInput, BudgetEntrySelection):
     id: UUID
 
 
-class UpdateEntry(EntryInput):
+class UpdateEntry(EntryInput, BudgetEntrySelection):
     version: int = Field(strict=True, ge=1)
 
 

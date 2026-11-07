@@ -131,7 +131,11 @@ class BudgetService:
         return list(
             await self.session.scalars(
                 select(RevisionRow)
-                .where(RevisionRow.book_id == book_id, RevisionRow.superseded_at.is_(None))
+                .where(
+                    RevisionRow.book_id == book_id,
+                    RevisionRow.superseded_at.is_(None),
+                    RevisionRow.monthly_only.is_(False),
+                )
                 .order_by(RevisionRow.effective_month)
                 .execution_options(populate_existing=True)
             )
@@ -297,6 +301,7 @@ class BudgetService:
             select(BudgetMonth.resolved_plan).where(
                 BudgetMonth.book_id == book_id,
                 BudgetMonth.month >= month,
+                BudgetMonth.is_deleted.is_(False),
             )
         )
         try:

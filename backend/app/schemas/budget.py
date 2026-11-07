@@ -143,6 +143,15 @@ class UpdateBudgetMonth(LedgerSchema):
     override: BudgetMonthOverride
 
 
+class DeleteMonthlyBudget(LedgerSchema):
+    request_id: UUID
+    version: BudgetVersion
+
+
+class SaveMonthlyBudget(DeleteMonthlyBudget):
+    plan: BudgetPlan
+
+
 class BudgetGroupTotal(LedgerSchema):
     group_id: UUID
     amount: BudgetUnsignedInteger
@@ -216,8 +225,8 @@ class BudgetMonthResponse(LedgerSchema):
         if self.state == "confirmed":
             if self.snapshot_id is None or self.version < 1:
                 raise ValueError("已确认预算必须有快照 ID 和正整数版本")
-        elif self.snapshot_id is not None or self.version != 0:
-            raise ValueError("未确认的月份不能带快照 ID 或快照版本")
+        elif self.snapshot_id is not None or (self.state == "preview" and self.version != 0):
+            raise ValueError("未确认的月份不能带快照 ID，预览不能带快照版本")
         if self.state != "confirmed" and (
             self.override.planned_income is not None or self.override.item_amounts
         ):

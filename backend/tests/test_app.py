@@ -37,6 +37,8 @@ def test_app_starts_without_external_services():
             "/api/v1/books/{book_id}/budgets/plan",
             "/api/v1/books/{book_id}/budgets/plan/preview",
             "/api/v1/books/{book_id}/budgets/months/{month}",
+            "/api/v1/books/{book_id}/budgets/monthly/{month}",
+            "/api/v1/books/{book_id}/budgets/monthly/{month}/execution",
             "/api/v1/books/{book_id}/budgets/months/{month}/confirm",
             "/api/v1/books/{book_id}/budgets/equalizations/preview",
             "/api/v1/books/{book_id}/budgets/equalizations",

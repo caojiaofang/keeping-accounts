@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
@@ -8,14 +8,13 @@ import AppIcon from '@/components/AppIcon.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
 import BookSwitcher from '@/components/BookSwitcher.vue'
 import EntryList from '@/components/EntryList.vue'
-import PromptSheet from '@/components/PromptSheet.vue'
 import FamilyBudgetCard from '@/components/FamilyBudgetCard.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
-import { money, toast } from '@/common/utils/format'
+import { money } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
-import { activeMembers, canManageBook } from '@/common/services/shared-books'
+import { activeMembers } from '@/common/services/shared-books'
 
 const store = useLedgerStore()
 const auth = useAuthStore()
@@ -28,9 +27,6 @@ const searching = ref(false)
 const categoryFilter = ref('')
 const categoryOpen = ref(false)
 const availableCategories = computed(() => categories.filter(category => filter.value === 'all' || category.type === filter.value))
-const budgetOpen = ref(false)
-const budgetVersion = ref<number>()
-watch(budgetOpen, open => { if (open) budgetVersion.value = store.activeBook.version })
 const filterTabs = [{ key: 'all' as const, label: '全部' }, { key: 'expense' as const, label: '支出' }, { key: 'income' as const, label: '收入' }]
 const filteredEntries = computed(() => store.monthEntries.filter(entry => {
   const matchesType = filter.value === 'all' || entry.type === filter.value
@@ -43,13 +39,7 @@ function chooseCategory() {
 }
 function selectCategory(id: string) { categoryFilter.value = id; categoryOpen.value = false }
 function setFilter(value: 'all' | EntryType) { filter.value = value; categoryFilter.value = '' }
-function openBudget() { if (!canManageBook(store.activeBook)) return toast('只有账本创建者可以设置共同预算'); budgetOpen.value = true }
-async function saveBudget(value: string) {
-  if (!/^\d{1,7}(\.\d{1,2})?$/.test(value) || Number(value) <= 0) return toast('请输入有效预算，最多保留两位小数')
-  if (!await store.updateBudget(Math.round(Number(value) * 100), budgetVersion.value)) return
-  budgetOpen.value = false
-  toast('月预算已更新')
-}
+
 function viewStats() { uni.redirectTo({ url: '/pages/statistics/index' }) }
 function openAssistant(mode: string) { uni.navigateTo({ url: `/pages/assistant/index?mode=${mode}` }) }
 function openCalendar() { uni.navigateTo({ url: '/pages/calendar/index' }) }
@@ -76,7 +66,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
       </view>
     </view>
 
-    <FamilyBudgetCard @legacy="openBudget" />
+    <FamilyBudgetCard />
 
     <view class="assistant-entries"><button class="assistant-entry" @tap="openAssistant('record')"><view class="assistant-entry-icon"><AppIcon name="edit" :size="34" /></view><view><text class="assistant-entry-title">一句话记账</text><text class="assistant-entry-copy">聊两句，发张图，轻松记好</text></view><AppIcon name="chevron" :size="23" /></button><view class="assistant-entry-divider" /><button class="assistant-entry" @tap="openAssistant('chat')"><view class="assistant-entry-icon"><AppIcon name="chart" :size="34" /></view><view><text class="assistant-entry-title">聊聊花费</text><text class="assistant-entry-copy">看看钱都花在哪儿了</text></view><AppIcon name="chevron" :size="23" /></button></view>
     <view class="section-head ledger-heading"><view class="row"><text class="section-title">收支明细</text><text class="entry-count">{{ filteredEntries.length }} 笔</text></view><view class="tools"><button class="calendar-shortcut" aria-label="消费日历" @tap="openCalendar"><AppIcon name="calendar" :size="30" /><text>日历</text></button><button class="tool-button" aria-label="搜索账单" @tap="searching = !searching; keyword = ''"><AppIcon name="search" :size="35" /></button><button class="tool-button" aria-label="筛选分类" @tap="chooseCategory"><AppIcon name="filter" :size="37" /><view v-if="categoryFilter" class="filter-dot" /></button></view></view>
@@ -86,7 +76,6 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
     <EntryList :entries="filteredEntries" />
     <view v-if="filteredEntries.length" class="list-end"><view /><text>日子有迹可循</text><view /></view>
     <BottomNav active="ledger" />
-    <PromptSheet :open="budgetOpen" title="设置月预算" description="给支出留一点边界，让生活多一点从容。" placeholder="输入预算金额（元）" :initial="String(store.activeBook.budget / 100)" numeric :maxlength="10" @close="budgetOpen = false" @confirm="saveBudget" />
     <view v-if="categoryOpen" class="sheet-mask" @tap="categoryOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">按分类筛选</text><button class="icon-button" aria-label="关闭分类筛选" @tap="categoryOpen = false"><AppIcon name="close" :size="34" /></button></view><scroll-view scroll-y class="category-options"><button class="all-category" :class="{ picked: !categoryFilter }" @tap="selectCategory('')">全部分类</button><view class="category-options-grid"><button v-for="category in availableCategories" :key="category.id" class="category-option" :class="{ picked: categoryFilter === category.id }" @tap="selectCategory(category.id)"><view :style="{ background: category.color }"><AppIcon :name="category.icon" :size="36" /></view><text>{{ category.name }}</text><text v-if="filter === 'all'" class="category-type">{{ category.type === 'income' ? '收入' : '支出' }}</text></button></view></scroll-view></view></view>
   </view>
 </template>

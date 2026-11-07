@@ -87,7 +87,7 @@ class BudgetRevision(Base):
             "plan_id",
             "effective_month",
             unique=True,
-            postgresql_where=text("superseded_at IS NULL"),
+            postgresql_where=text("superseded_at IS NULL AND monthly_only = false"),
         ),
         Index("ix_budget_revisions_book_month", "book_id", "effective_month"),
     )
@@ -97,6 +97,9 @@ class BudgetRevision(Base):
     book_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     effective_month: Mapped[date] = mapped_column(Date, nullable=False)
     plan: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    monthly_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -127,6 +130,7 @@ class BudgetMonth(BudgetTimestamps, Base):
     book_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     month: Mapped[date] = mapped_column(Date, nullable=False)
     source_revision_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     base_plan: Mapped[dict] = mapped_column(JSONB, nullable=False)
     override: Mapped[dict] = mapped_column(
         JSONB,

@@ -116,8 +116,10 @@ def migration_roundtrip(connection):
     baseline = connection.execute(select(Book.id, Book.name, Book.budget).order_by(Book.id)).all()
     baseline_entry = connection.execute(select(LedgerEntry.__table__)).all()
 
-    command.upgrade(config, "0006_budget")
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006_budget"
+    command.upgrade(config, "head")
+    assert (
+        connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009_budget_deletion"
+    )
     assert (
         connection.execute(select(Book.id, Book.name, Book.budget).order_by(Book.id)).all()
         == baseline
@@ -139,7 +141,7 @@ def migration_roundtrip(connection):
         connection.scalar(select(LedgerEntry.note).where(LedgerEntry.id == old_entry))
         == "迁移前保留的账单"
     )
-    command.upgrade(config, "0006_budget")
+    command.upgrade(config, "head")
     validate_metadata(connection)
     assert connection.scalar(select(text("count(*)")).select_from(BudgetPlan)) == 0
 

@@ -49,6 +49,8 @@ export interface UpdateBudgetMonth {
   override: BudgetMonthOverride
 }
 export interface BudgetGroupTotal { groupId: string; amount: number }
+export interface SaveMonthlyBudget { requestId: string; version: number; plan: BudgetPlan }
+export interface DeleteMonthlyBudget { requestId: string; version: number }
 export interface BudgetTotals {
   plannedIncome: number
   expenseAmount: number
@@ -89,7 +91,7 @@ interface BudgetMonthBase {
   generatedAt: number
 }
 export type BudgetMonthResponse = BudgetMonthBase & (
-  | { state: 'not_set'; snapshotId: null; version: 0; sourceRevisionId: null; plan: null; totals: null }
+  | { state: 'not_set'; snapshotId: null; version: number; sourceRevisionId: null; plan: null; totals: null }
   | { state: 'preview'; snapshotId: null; version: 0; sourceRevisionId: string; plan: BudgetPlan; totals: BudgetTotals }
   | { state: 'confirmed'; snapshotId: string; version: number; sourceRevisionId: string; plan: BudgetPlan; totals: BudgetTotals }
 )

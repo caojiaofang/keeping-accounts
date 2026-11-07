@@ -7,7 +7,9 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.core.errors import ServiceError
-from app.models.budget import BudgetMonth, BudgetPreview
+from app.models.budget import BudgetEntryLink, BudgetMonth, BudgetPlan, BudgetPreview
+from app.models.budget import BudgetRevision as RevisionRow
+from app.models.ledger import LedgerEntry
 from app.schemas.budget import (
     MAX_SAFE_INTEGER,
     ApplyBudgetEqualization,
@@ -18,7 +20,9 @@ from app.schemas.budget import (
     BudgetMonthResponse,
     BudgetRevision,
     ConfirmBudgetMonth,
+    DeleteMonthlyBudget,
     PreviewBudgetEqualization,
+    SaveMonthlyBudget,
     UpdateBudgetMonth,
 )
 from app.schemas.budget import BudgetPlan as PlanData
@@ -66,6 +70,20 @@ class BudgetMonthService(BudgetService):
         row: BudgetMonth | None = None,
         source: BudgetRevision | None = None,
     ) -> BudgetMonthResponse:
+        if row is not None and row.is_deleted:
+            return BudgetMonthResponse(
+                book_id=book_id,
+                month=month,
+                plan_version=plan_version,
+                state="not_set",
+                snapshot_id=None,
+                version=row.version,
+                source_revision_id=None,
+                plan=None,
+                override=BudgetMonthOverride(),
+                totals=None,
+                generated_at=int(now.timestamp() * 1000),
+            )
         override = BudgetMonthOverride()
         plan = source.plan if source else None
         if row is not None:
@@ -84,14 +102,152 @@ class BudgetMonthService(BudgetService):
             generated_at=int(now.timestamp() * 1000),
         )
 
-    async def read_month(self, book_id: UUID, month: str) -> BudgetMonthResponse:
+    async def read_month(
+        self, book_id: UUID, month: str, *, snapshot_only=False
+    ) -> BudgetMonthResponse:
         await self.ledger.require_book(book_id)
         root = await self.root(book_id)
         row = await self.snapshot(book_id, month)
-        source = None if row else await self.source_for_month(book_id, month)
+        source = None if row or snapshot_only else await self.source_for_month(book_id, month)
         return self.month_response(
             book_id, month, root.version if root else 0, self.now(), row=row, source=source
         )
+
+    async def save_monthly(
+        self, book_id: UUID, month: str, body: SaveMonthlyBudget
+    ) -> BudgetMonthResponse:
+        """有效家庭成员共同维护月预算；账本锁、月份版本与请求 ID 防止相互覆盖。"""
+        book = await self.ledger.require_book(book_id, write=True)
+        digest = request_hash({"month": month, "body": body.model_dump(mode="json", by_alias=True)})
+        replay = await self.replay_mutation(
+            book_id, body.request_id, "monthly_save", digest, BudgetMonthResponse
+        )
+        if replay is not None:
+            await self.session.commit()
+            return replay
+        now = self.now()
+        effective = self.validate_month(month, now)
+        row = await self.snapshot(book_id, month)
+        if (row.version if row else 0) != body.version:
+            raise ServiceError(409, "本月预算已被家人或其他设备修改，请刷新后重试")
+        if row and row.version >= MAX_SAFE_INTEGER:
+            raise ServiceError(409, "月预算版本已达到上限，暂时无法修改")
+        root = await self.root(book_id)
+        if root is None:
+            root = BudgetPlan(id=uuid4(), book_id=book_id, version=0)
+            self.session.add(root)
+            await self.session.flush()
+        self.validate_version(root, root.version)
+        await self.register_projects(book_id, body.plan, effective)
+        await self.unlink_month_items(book, effective, {item.id for item in body.plan.items})
+        # 独立月版本仅作为该月快照的来源，不成为后续月份的默认方案。
+        revision = RevisionRow(
+            id=uuid4(),
+            plan_id=root.id,
+            book_id=book_id,
+            effective_month=effective,
+            plan=body.plan.model_dump(mode="json", by_alias=True),
+            monthly_only=True,
+            created_by=self.user_id,
+            created_at=now,
+        )
+        self.session.add(revision)
+        root.version += 1
+        await self.session.flush()
+        if row is None:
+            row = await self.create_snapshot(book_id, month, revision_response(revision))
+        else:
+            row.is_deleted = False
+            row.source_revision_id = revision.id
+            row.base_plan = revision.plan
+            row.resolved_plan = revision.plan
+            row.override = BudgetMonthOverride().model_dump(mode="json", by_alias=True)
+            row.version += 1
+            row.updated_by = self.user_id
+        result = self.month_response(book_id, month, root.version, now, row=row)
+        self.record_mutation(book_id, body.request_id, "monthly_save", digest, result)
+        if book.kind == "shared":
+            self.ledger.activity(
+                book_id, "budget_month", row.id, {"month": month, "version": row.version}
+            )
+        await self.session.flush()
+        await self.sync_project_status(book_id, now)
+        await self.session.commit()
+        return result
+
+    async def unlink_month_items(self, book, effective: date, keep: set[UUID]):
+        """只解除指定月份的已移除项目关联，原账单及其他月份不变。"""
+        from app.services.budget_execution import BudgetExecutionService
+
+        end = (effective.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        rows = (
+            await self.session.execute(
+                select(LedgerEntry, BudgetEntryLink)
+                .join(BudgetEntryLink, BudgetEntryLink.entry_id == LedgerEntry.id)
+                .where(
+                    BudgetEntryLink.book_id == book.id,
+                    BudgetEntryLink.is_deleted.is_(False),
+                    BudgetEntryLink.project_id.not_in(keep),
+                    LedgerEntry.book_id == book.id,
+                    LedgerEntry.is_deleted.is_(False),
+                    LedgerEntry.date.between(effective, end),
+                )
+                .order_by(LedgerEntry.id)
+            )
+        ).all()
+        execution = BudgetExecutionService(self.ledger, clock=self.clock)
+        for entry, link in rows:
+            await execution.reconcile(entry, link, None, None)
+            if book.kind == "shared":
+                self.ledger.activity(
+                    book.id,
+                    "budget_entry_link",
+                    entry.id,
+                    {
+                        "linkVersion": link.version,
+                        "isDeleted": True,
+                        "reason": "budget_item_removed",
+                    },
+                )
+
+    async def delete_monthly(
+        self, book_id: UUID, month: str, body: DeleteMonthlyBudget
+    ) -> BudgetMonthResponse:
+        book = await self.ledger.require_book(book_id, write=True)
+        digest = request_hash({"month": month, "body": body.model_dump(mode="json", by_alias=True)})
+        replay = await self.replay_mutation(
+            book_id, body.request_id, "monthly_delete", digest, BudgetMonthResponse
+        )
+        if replay is not None:
+            await self.session.commit()
+            return replay
+        now = self.now()
+        effective = self.validate_month(month, now)
+        row = await self.snapshot(book_id, month)
+        if row is None or row.is_deleted or row.version != body.version:
+            raise ServiceError(409, "月预算已被修改或删除，请刷新后重试")
+        root = await self.root(book_id)
+        self.validate_version(root, root.version)
+        if row.version >= MAX_SAFE_INTEGER:
+            raise ServiceError(409, "月预算版本已达到上限，暂时无法修改")
+        await self.unlink_month_items(book, effective, set())
+        row.is_deleted = True
+        row.version += 1
+        row.updated_by = self.user_id
+        root.version += 1
+        await self.session.flush()
+        result = self.month_response(book_id, month, root.version, now, row=row)
+        self.record_mutation(book_id, body.request_id, "monthly_delete", digest, result)
+        if book.kind == "shared":
+            self.ledger.activity(
+                book_id,
+                "budget_month",
+                row.id,
+                {"month": month, "version": row.version, "isDeleted": True},
+            )
+        await self.sync_project_status(book_id, now)
+        await self.session.commit()
+        return result
 
     async def create_snapshot(
         self,
@@ -140,6 +296,8 @@ class BudgetMonthService(BudgetService):
         row = await self.snapshot(book_id, month)
         created = row is None
         if row is not None:
+            if row.is_deleted:
+                raise ServiceError(409, "该月预算已删除，请重新设置月预算")
             if row.source_revision_id != body.source_revision_id:
                 raise ServiceError(409, "该月已按其他方案确认，请读取已保存的预算")
         else:
@@ -189,7 +347,7 @@ class BudgetMonthService(BudgetService):
         now = self.now()
         self.validate_month(month, now)
         row = await self.snapshot(book_id, month)
-        if row is None:
+        if row is None or row.is_deleted:
             raise ServiceError(409, "该月预算尚未确认，请先读取并确认")
         if row.version != body.version:
             raise ServiceError(409, "月预算已在其他设备更新，请刷新后重试")
@@ -235,6 +393,8 @@ class BudgetMonthService(BudgetService):
                 index += 1
             row = snapshots.get(allocation.month)
             if row is not None:
+                if row.is_deleted:
+                    raise ServiceError(422, "均摊区间包含已删除预算的月份，请先重新设置月预算")
                 base, override, _ = self.snapshot_data(row)
                 if row.version >= MAX_SAFE_INTEGER:
                     raise ServiceError(409, "月预算版本已达到上限，暂时无法修改")

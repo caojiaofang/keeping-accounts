@@ -47,6 +47,30 @@ def link_response(row: BudgetEntryLink) -> BudgetEntryLinkResponse:
 
 
 class BudgetExecutionService(BudgetFundService):
+    async def save_entry_selection(self, entry, item_id, expected_version, *, replay=False):
+        """账单和预算归集在同一事务内保存；不自行提交。"""
+        link = await self.link_row(entry.id)
+        current = link.project_id if link and not link.is_deleted else None
+        if replay:
+            if current != item_id:
+                raise ServiceError(409, "此次记账的预算关联已变化，请刷新后重试")
+            return
+        if (link.version if link else 0) != expected_version:
+            raise ServiceError(409, "预算关联已被其他成员修改，请重新打开账单")
+        target = None
+        if item_id is not None:
+            target = await self.project(entry.book_id, item_id)
+            month = await self.read_month(
+                entry.book_id, entry.date.strftime("%Y-%m"), snapshot_only=True
+            )
+            if not month.plan or not any(item.id == item_id for item in month.plan.items):
+                raise ServiceError(422, "请选择账单发生月份的预算项目")
+            problem = await self.target_problem(target, entry)
+            if problem:
+                raise ServiceError(422, problem.replace("，已取消预算关联", "，不能关联该预算项目"))
+        goal_id = link.goal_period_id if current == item_id and link else None
+        await self.reconcile(entry, link, target, goal_id, force_link=True)
+
     async def link_row(self, entry_id: UUID) -> BudgetEntryLink | None:
         return await self.session.scalar(
             select(BudgetEntryLink)
@@ -89,9 +113,11 @@ class BudgetExecutionService(BudgetFundService):
             return "账单日期晚于北京时间今天，已取消预算关联"
         if entry.date < project.enabled_month:
             return "账单日期早于预算用途启用月，已取消预算关联"
+        month = entry.date.strftime("%Y-%m")
+        snapshot = await self.snapshot(project.book_id, month)
+        if snapshot and snapshot.is_deleted:
+            return "账单发生月预算已删除，已取消预算关联"
         if project.kind == "expense":
-            month = entry.date.strftime("%Y-%m")
-            snapshot = await self.snapshot(project.book_id, month)
             source = None if snapshot else await self.source_for_month(project.book_id, month)
             plan = self.snapshot_data(snapshot)[2] if snapshot else source.plan if source else None
             if plan is None or not any(item.id == project.id for item in plan.items):
@@ -415,8 +441,10 @@ class BudgetExecutionService(BudgetFundService):
             **detail.model_dump(), entries=page.entries, next_entry_cursor=page.next_cursor
         )
 
-    async def month_execution(self, book_id: UUID, month: str) -> BudgetMonthExecution:
-        budget = await self.read_month(book_id, month)
+    async def month_execution(
+        self, book_id: UUID, month: str, *, snapshot_only=False
+    ) -> BudgetMonthExecution:
+        budget = await self.read_month(book_id, month, snapshot_only=snapshot_only)
         start, end = month_bounds(month)
         totals = (
             await self.session.execute(

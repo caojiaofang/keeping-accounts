@@ -38,7 +38,7 @@ try {
     Push-Location -LiteralPath $backendPath
     try {
         # 不扩大到依赖远端数据库、Redis 或模型的其他集成测试。
-        & $pythonPath -m pytest -q -s tests/test_budget_migrations_integration.py tests/test_budget_plan_integration.py tests/test_budget_months_integration.py tests/test_budget_funds_integration.py tests/test_budget_execution_integration.py tests/test_budget_frontend_integration.py
+        & $pythonPath -m pytest -q -s tests/test_budget_migrations_integration.py tests/test_budget_plan_integration.py tests/test_budget_months_integration.py tests/test_budget_funds_integration.py tests/test_budget_execution_integration.py tests/test_budget_frontend_integration.py tests/test_monthly_budget_integration.py
         $result = $LASTEXITCODE
         if ($result -ne 0) { throw '隔离预算联调失败，请检查输出。' }
     }

@@ -65,7 +65,7 @@ def test_ledger_api_uses_camel_case_and_does_not_echo_invalid_input():
     app = create_app(Settings(_env_file=None, database_url=None, redis_url=None))
     body = CreateEntry.model_validate(entry_input())
     saved = EntryResponse(
-        **body.model_dump(),
+        **body.model_dump(exclude={"budget_item_id", "budget_link_version"}),
         created_at=int(datetime.now(UTC).timestamp() * 1000),
         created_by=uuid4(),
         version=1,

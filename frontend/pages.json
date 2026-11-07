@@ -85,13 +85,13 @@
     {
       "path": "pages/budget-settings/index",
       "style": {
-        "navigationBarTitleText": "家庭预算设置"
+        "navigationBarTitleText": "设置月预算"
       }
     },
     {
       "path": "pages/budget-overview/index",
       "style": {
-        "navigationBarTitleText": "家庭预算",
+        "navigationBarTitleText": "月度预算",
         "enablePullDownRefresh": true
       }
     },

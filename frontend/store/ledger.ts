@@ -239,9 +239,10 @@ export const useLedgerStore = defineStore('ledger', () => {
     return chatStreamV2(`/api/v1/assistant/v2${path}`, cloudToken, data, receive)
   }
 
-  function saveEntry(entry: Omit<Entry, 'id' | 'createdAt' | 'createdBy' | 'updatedBy' | 'updatedAt'>, id?: string, requestId?: string): boolean | Promise<boolean> {
+  function saveEntry(entry: Omit<Entry, 'id' | 'createdAt' | 'createdBy' | 'updatedBy' | 'updatedAt'> & { budgetItemId?: string | null; budgetLinkVersion?: number }, id?: string, requestId?: string): boolean | Promise<boolean> {
     const targetBook = books.value.find(book => book.id === entry.bookId)
     if (!canWriteBook(targetBook)) { toast('你还不是这个账本的成员'); return false }
+    if (!accountId.value && entry.budgetItemId !== undefined) return saveLocalBudget(entry, id, requestId)
     if (accountId.value) {
       const original = id ? entries.value.find(item => item.id === id) : undefined
       if (id && !original) { toast('这笔账单不存在'); return false }
@@ -267,12 +268,39 @@ export const useLedgerStore = defineStore('ledger', () => {
       if (entries.value[index].bookId !== entry.bookId && (targetBook?.kind === 'shared' || books.value.find(book => book.id === entries.value[index].bookId)?.kind === 'shared')) { toast('多人账本的账单不能转移到其他账本'); return false }
       entries.value[index] = { ...entries.value[index], ...entry, version: (entries.value[index].version || 1) + 1, createdBy: entries.value[index].createdBy }
     } else {
-      entries.value.push({ ...entry, id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, version: 1, createdAt: Date.now(), createdBy: DEMO_USER_ID })
+      entries.value.push({ ...entry, id: requestId || `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, version: 1, createdAt: Date.now(), createdBy: DEMO_USER_ID })
     }
     selectedMonth.value = entry.date.slice(0, 7)
     activeBookId.value = entry.bookId
     persist()
     return true
+  }
+
+  async function saveLocalBudget(input: Parameters<typeof saveEntry>[0], id?: string, requestId?: string): Promise<boolean> {
+    const { budgetItemId, budgetLinkVersion, ...entry } = input
+    const previousEntries = entries.value.map(e => ({ ...e })), previousMonth = selectedMonth.value, previousBook = activeBookId.value
+    const targetBook = books.value.find(b => b.id === entry.bookId)!
+    const budgetApi = useBudgetStore().apiForBook(targetBook)
+    try {
+      const original = id ? entries.value.find(e => e.id === id) : undefined
+      const current = original ? await useBudgetStore().apiForBook(books.value.find(b => b.id === original.bookId)!).link(original.id) : null
+      if ((current?.linkVersion || 0) !== (budgetLinkVersion || 0)) throw new Error('预算关联已变化，请重新打开账单')
+      if (budgetItemId) {
+        const month = await budgetApi.monthly(entry.date.slice(0, 7))
+        if (entry.type !== 'expense' || !month.plan?.items.some(i => i.id === budgetItemId)) throw new Error('请选择账单发生月份的预算项目')
+      }
+      const createId = requestId || newId()
+      if (!await saveEntry(entry, id, createId)) return false
+      const savedId = id || createId, latest = await budgetApi.link(savedId)
+      const body = { requestId: newId(), entryVersion: latest.entryVersion, linkVersion: latest.linkVersion }
+      if (budgetItemId) await budgetApi.setLink(savedId, { ...body, itemId: budgetItemId })
+      else await budgetApi.removeLink(savedId, body)
+      useBudgetStore().ledgerChanged()
+      return true
+    } catch (cause) {
+      entries.value = previousEntries; selectedMonth.value = previousMonth; activeBookId.value = previousBook; persist()
+      toast(cause instanceof Error ? cause.message : '预算关联保存失败'); return false
+    }
   }
 
   function deleteEntry(id: string, expectedVersion?: number): boolean | Promise<boolean> {

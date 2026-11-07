@@ -251,7 +251,7 @@ class LedgerService:
         inserted = await self.session.scalar(
             insert(LedgerEntry)
             .values(
-                **body.model_dump(),
+                **body.model_dump(exclude={"budget_item_id", "budget_link_version"}),
                 created_by=self.user_id,
                 updated_by=self.user_id,
             )
@@ -267,9 +267,18 @@ class LedgerService:
         if entry is None:
             raise ServiceError(404, "账单不存在或无权访问")
         if entry.is_deleted or any(
-            getattr(entry, key) != value for key, value in body.model_dump().items()
+            getattr(entry, key) != value
+            for key, value in body.model_dump(
+                exclude={"budget_item_id", "budget_link_version"}
+            ).items()
         ):
             raise ServiceError(409, "此次记账已处理且内容已变化，请刷新明细后重试")
+        if "budget_item_id" in body.model_fields_set:
+            from app.services.budget_execution import BudgetExecutionService
+
+            await BudgetExecutionService(self).save_entry_selection(
+                entry, body.budget_item_id, body.budget_link_version, replay=not inserted
+            )
         result = entry_response(entry)
         if inserted and book.kind == "shared":
             self.activity(
@@ -328,7 +337,7 @@ class LedgerService:
                 LedgerEntry.version == body.version,
             )
             .values(
-                **body.model_dump(exclude={"version"}),
+                **body.model_dump(exclude={"version", "budget_item_id", "budget_link_version"}),
                 version=LedgerEntry.version + 1,
                 updated_by=self.user_id,
                 updated_at=func.now(),
@@ -341,7 +350,14 @@ class LedgerService:
         # 局部导入避免预算服务复用 LedgerService 时形成模块循环。
         from app.services.budget_execution import BudgetExecutionService
 
-        notice = await BudgetExecutionService(self).sync_entry(entry, old_book.id)
+        budget_service = BudgetExecutionService(self)
+        if "budget_item_id" in body.model_fields_set:
+            await budget_service.save_entry_selection(
+                entry, body.budget_item_id, body.budget_link_version
+            )
+            notice = None
+        else:
+            notice = await budget_service.sync_entry(entry, old_book.id)
         result = entry_response(entry).model_copy(update={"budget_notice": notice})
         if old_book.kind == "shared":
             self.activity(
