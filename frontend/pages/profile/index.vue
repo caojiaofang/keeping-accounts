@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
 import BottomNav from '@/components/BottomNav.vue'
@@ -12,6 +12,9 @@ import { useAuthStore } from '@/store/auth'
 import { categories } from '@/common/data/categories'
 import { toast } from '@/common/utils/format'
 import { entryAuthor } from '@/common/services/shared-books'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 const auth = useAuthStore()

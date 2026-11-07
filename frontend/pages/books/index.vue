@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
@@ -9,6 +9,9 @@ import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { money, toast } from '@/common/utils/format'
 import { activeMembers } from '@/common/services/shared-books'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 store.hydrate()

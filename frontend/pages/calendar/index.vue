@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import { computed, ref, watch } from 'vue'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
@@ -11,6 +11,9 @@ import { useLedgerStore } from '@/store/ledger'
 import { localDate, money, shiftMonth } from '@/common/utils/format'
 import { buildExpenseCalendar, calendarAmount, filterCalendarEntries, isCalendarMonth, selectedDateInMonth } from '@/common/services/expense-calendar'
 import type { CalendarMode, ExpenseCalendarDay } from '@/common/services/expense-calendar'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 store.hydrate()

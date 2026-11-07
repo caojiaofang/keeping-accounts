@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import CloudStatus from '@/components/CloudStatus.vue'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
@@ -9,6 +9,9 @@ import PromptSheet from '@/components/PromptSheet.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { activeMembers, canManageBook, FAMILY_INVITATION, memberTotals } from '@/common/services/shared-books'
 import { money, toast } from '@/common/utils/format'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 store.hydrate()

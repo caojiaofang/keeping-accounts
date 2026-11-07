@@ -11,7 +11,7 @@ import { activeMembers, canManageBook, DEMO_USER_ID, memberTotals, validInvitati
 import { localDate, money, toast } from '@/common/utils/format'
 import type { BookActivity, BookMember, Entry } from '@/common/types'
 import CloudStatus from '@/components/CloudStatus.vue'
-import { invitationPath } from '@/common/services/invitations'
+import { bookShare } from '@/common/services/share'
 
 const store = useLedgerStore()
 store.hydrate()
@@ -53,9 +53,10 @@ onShow(async () => {
   if (book.value) store.selectBook(bookId.value)
 })
 onPullDownRefresh(async () => { try { await store.refreshCloud() } finally { uni.stopPullDownRefresh() } })
-onShareAppMessage(() => invitationValid.value && store.accountId ? {
-  title: `邀请你加入「${book.value?.name || '共同账本'}」`, path: invitationPath(invitationToken.value),
-} : { title: '墨记，把日子一笔一笔记好', path: '/pages/ledger/index' })
+onShareAppMessage(options => {
+  now.value = Date.now()
+  return bookShare({ from: options.from, loggedIn: !!store.accountId, owner: owner.value, inviting: inviting.value, valid: invitationValid.value, token: invitationToken.value, bookName: book.value?.name || '' })
+})
 function selectAndOpen(path: string) {
   if (!book.value) return
   store.selectBook(book.value.id)

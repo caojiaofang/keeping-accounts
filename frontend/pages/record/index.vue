@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLedgerStore } from '@/store/ledger'
@@ -12,6 +12,9 @@ import { isCalendarDate } from '@/common/services/expense-calendar'
 import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
 import type { EntryType } from '@/common/types'
 import { newId } from '@/common/utils/id'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 store.hydrate()

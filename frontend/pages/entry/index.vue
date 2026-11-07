@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import { useLedgerStore } from '@/store/ledger'
 import type { Book, Entry } from '@/common/types'
 import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
 import { money } from '@/common/utils/format'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 const store = useLedgerStore()
 const id = ref(''), bookId = ref(''), owner = ref('')
 const entry = ref<Entry>(), book = ref<Book>()

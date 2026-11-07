@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
 import MonthPicker from '@/components/MonthPicker.vue'
@@ -12,6 +12,9 @@ import { canWriteBook } from '@/common/services/shared-books'
 import { monthlyBudgetUsage } from '@/common/services/monthly-budget'
 import { money, localDate } from '@/common/utils/format'
 import type { BudgetEntryPage } from '@/common/types/budget'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const ledger = useLedgerStore(), budget = useBudgetStore()
 ledger.hydrate()

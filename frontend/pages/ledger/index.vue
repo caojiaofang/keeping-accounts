@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShow, onPullDownRefresh, onShareAppMessage } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
@@ -15,6 +15,9 @@ import { categories } from '@/common/data/categories'
 import { money } from '@/common/utils/format'
 import type { EntryType } from '@/common/types'
 import { activeMembers } from '@/common/services/shared-books'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 const auth = useAuthStore()

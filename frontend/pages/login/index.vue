@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
 import { safeLoginRedirect } from '@/common/services/auth'
 import { useAuthStore } from '@/store/auth'
 import { pendingInvitationPath } from '@/common/services/invitations'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const auth = useAuthStore()
 const destination = ref('/pages/ledger/index')

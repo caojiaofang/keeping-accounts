@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MemberAvatar from '@/components/MemberAvatar.vue'
@@ -11,6 +11,9 @@ import { activeMembers, DEMO_USER_ID, FAMILY_INVITATION, familyPartner, validInv
 import { forgetInvitation, invitationPath, isCloudInvitation, previewInvitation, rememberInvitation } from '@/common/services/invitations'
 import { localDate, toast } from '@/common/utils/format'
 import type { InvitationPreview } from '@/common/types'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 const auth = useAuthStore()

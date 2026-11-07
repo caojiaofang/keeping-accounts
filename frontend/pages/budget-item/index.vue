@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import CloudStatus from '@/components/CloudStatus.vue'
 import { useLedgerStore } from '@/store/ledger'
@@ -13,6 +13,9 @@ import { money, localDate, toast } from '@/common/utils/format'
 import { newId } from '@/common/utils/id'
 import type { Entry } from '@/common/types'
 import type * as B from '@/common/types/budget'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const ledger = useLedgerStore(), budget = useBudgetStore()
 ledger.hydrate()

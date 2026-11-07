@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onHide, onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import { onHide, onLoad, onShow, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import QuickRecord from '@/components/assistant/QuickRecord.vue'
@@ -8,6 +8,9 @@ import ExpenseChat from '@/components/assistant/ExpenseChat.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useChatStore } from '@/store/chat'
 import { localDate } from '@/common/utils/format'
+import { appShare } from '@/common/services/share'
+
+onShareAppMessage(appShare)
 
 const store = useLedgerStore()
 store.hydrate()
