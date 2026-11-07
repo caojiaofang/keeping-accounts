@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.errors import ServiceError
 from app.models.budget import BudgetEntryLink, BudgetMonth, BudgetPlan, BudgetPreview
@@ -18,6 +18,7 @@ from app.schemas.budget import (
     BudgetItemAmount,
     BudgetMonthOverride,
     BudgetMonthResponse,
+    BudgetMonthSummary,
     BudgetRevision,
     ConfirmBudgetMonth,
     DeleteMonthlyBudget,
@@ -31,6 +32,43 @@ from app.services.budget_math import allocate_cents, apply_month_override, summa
 
 
 class BudgetMonthService(BudgetService):
+    async def month_summary(self, book_id: UUID, month: str) -> BudgetMonthSummary:
+        """卡片只查当月快照和支出合计；查询数不随项目、资金流水数增加。"""
+        await self.ledger.require_book(book_id)
+        row = await self.snapshot(book_id, month)
+        start = date.fromisoformat(month + "-01")
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        spent = int(
+            await self.session.scalar(
+                select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(
+                    LedgerEntry.book_id == book_id,
+                    LedgerEntry.is_deleted.is_(False),
+                    LedgerEntry.type == "expense",
+                    LedgerEntry.date.between(start, end),
+                )
+            )
+        )
+        amount = None
+        if row is not None and not row.is_deleted:
+            amount = sum(
+                item.monthly_amount
+                for item in self.snapshot_data(row)[2].items
+                if item.kind == "expense"
+            )
+        if spent > MAX_SAFE_INTEGER or (amount is not None and amount > MAX_SAFE_INTEGER):
+            raise ServiceError(409, "预算合计超过支持范围，请检查记录")
+        return BudgetMonthSummary(
+            book_id=book_id,
+            month=month,
+            state="confirmed" if amount is not None else "not_set",
+            version=row.version if row else 0,
+            budget_amount=amount,
+            expense_amount=spent,
+            remaining_amount=max(amount - spent, 0) if amount is not None else None,
+            over_amount=max(spent - amount, 0) if amount is not None else None,
+            generated_at=int(self.now().timestamp() * 1000),
+        )
+
     async def snapshot(self, book_id: UUID, month: str) -> BudgetMonth | None:
         return await self.session.scalar(
             select(BudgetMonth)

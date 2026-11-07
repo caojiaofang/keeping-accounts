@@ -182,6 +182,12 @@ export function createBudgetDemo(bookId: string, entries: () => Entry[], persist
       return state.snapshots[key]
     },
     monthlyExecution: (key: string) => handlers.execution(key, true),
+    summary: (key: string) => {
+      const budget = handlers.monthly(key) as B.BudgetMonthResponse
+      const spent = entries().filter(e => e.bookId === bookId && e.type === 'expense' && e.date.startsWith(key)).reduce((sum, e) => sum + e.amount, 0)
+      const amount = budget.totals?.expenseAmount ?? null
+      return { schemaVersion: 1, bookId, month: key, state: budget.state, version: budget.version, budgetAmount: amount, expenseAmount: spent, remainingAmount: amount === null ? null : Math.max(amount - spent, 0), overAmount: amount === null ? null : Math.max(spent - amount, 0), generatedAt: Date.now() }
+    },
     confirm: (key: string, body: B.ConfirmBudgetMonth) => { version(state.plan.version, body.planVersion); if (month(key).sourceRevisionId !== body.sourceRevisionId) fail('来源已变化'); return confirm(key) },
     updateMonth: (key: string, body: B.UpdateBudgetMonth) => {
       if (key < monthNow()) fail('不能编辑过去月份')

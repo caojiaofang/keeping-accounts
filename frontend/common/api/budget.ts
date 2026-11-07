@@ -17,6 +17,7 @@ export function createBudgetApi(token: string, bookId: string) {
     savePlan: (body: B.SaveBudgetRevision) => call<B.SavedBudgetRevision>('/plan', 'PUT', body),
     month: (month: string) => call<B.BudgetMonthResponse>(`/months/${id(month)}`),
     monthly: (month: string) => call<B.BudgetMonthResponse>(`/monthly/${id(month)}`),
+    summary: (month: string) => call<B.BudgetMonthSummary>(`/monthly/${id(month)}/summary`),
     saveMonthly: (month: string, body: B.SaveMonthlyBudget) => call<B.BudgetMonthResponse>(`/monthly/${id(month)}`, 'PUT', body),
     deleteMonthly: (month: string, body: B.DeleteMonthlyBudget) => call<B.BudgetMonthResponse>(`/monthly/${id(month)}`, 'DELETE', body),
     monthlyExecution: (month: string) => call<B.BudgetMonthExecution>(`/monthly/${id(month)}/execution`),

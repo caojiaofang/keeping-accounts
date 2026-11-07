@@ -281,3 +281,16 @@ export interface BudgetMonthExecution {
   unlinkedExpenseTotal: number
   items: BudgetItemExecution[]
 }
+
+export interface BudgetMonthSummary {
+  schemaVersion: 1
+  bookId: string
+  month: BudgetMonth
+  state: 'not_set' | 'confirmed'
+  version: number
+  budgetAmount: number | null
+  expenseAmount: number
+  remainingAmount: number | null
+  overAmount: number | null
+  generatedAt: number
+}

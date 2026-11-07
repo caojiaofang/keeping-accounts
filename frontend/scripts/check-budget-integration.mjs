@@ -32,6 +32,7 @@ globalThis.uni = {
 const { createBudgetApi } = await import(await moduleUrl(path.join(root, 'common/api/budget.ts')))
 const { apiRequest } = await import(await moduleUrl(path.join(root, 'common/api/request.ts')))
 const { useBudgetStore } = await import(await moduleUrl(path.join(root, 'store/budget.ts')))
+const { useBudgetSummaryStore } = await import(await moduleUrl(path.join(root, 'store/budget-summary.ts')))
 const token = 'user-0', bookId = config.books[0], month = '2026-11', date = '2026-11-06'
 const api = createBudgetApi(token, bookId), saving = config.plan.items[5].id, reserve = config.plan.items[3].id
 const requestId = randomUUID, copy = value => JSON.parse(JSON.stringify(value))
@@ -157,10 +158,15 @@ await check('成员保存独立月预算，直接记账关联与跨月额度隔�
   assert.equal(store.month.totals.expenseAmount, 10000)
   const entry = await ledger('/entries', 'POST', { id: randomUUID(), bookId: monthlyBook, type: 'expense', categoryId: 'food', amount: 12000, date, account: '微信', budgetItemId: itemId, budgetLinkVersion: 0 }, 2)
   assert.equal((await monthlyApi.monthlyExecution(month)).items[0].remainingAmount, -2000)
+  const summary = useBudgetSummaryStore(), beforeSummary = requests
+  assert.deepEqual(await Promise.all([summary.load(), summary.load()]), [true, true])
+  assert.equal(requests - beforeSummary, 1)
+  assert.equal(summary.data.overAmount, 2000)
   assert.equal((await monthlyApi.monthly('2026-12')).state, 'not_set')
   await monthlyApi.saveMonthly('2026-12', { ...body, requestId: requestId() })
   assert.equal((await monthlyApi.monthlyExecution('2026-12')).items[0].remainingAmount, 10000)
   await ledger(`/entries/${entry.id}?version=1`, 'DELETE', undefined, 2)
+  store.ledgerChanged(); assert.ok(await summary.load()); assert.equal(summary.data.expenseAmount, 0)
   assert.equal((await monthlyApi.monthlyExecution(month)).items[0].remainingAmount, 10000)
 })
 assert.equal(passed, 9)

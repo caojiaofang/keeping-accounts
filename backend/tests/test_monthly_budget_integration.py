@@ -6,7 +6,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import event, update
 from test_budget_execution_integration import edit_body, ledger
 from test_budget_plan_integration import local_api, run_case
 
@@ -283,3 +283,81 @@ async def reserve_deletion_case(clock):
         assert (await api.request("GET", 1, "/monthly/2026-11/execution"))[
             "unlinkedExpenseTotal"
         ] == 12000
+
+
+def test_summary_matches_execution_without_reading_project_history(monkeypatch):
+    run_case(monkeypatch, summary_case)
+
+
+async def summary_case(clock):
+    async with local_api() as api:
+        path = "/monthly/2026-11/summary"
+        empty = await api.request("GET", 1, path, who=1)
+        assert empty["state"] == "not_set" and empty["budgetAmount"] is None
+        plan = plan_for(api)
+        await api.request("PUT", 1, "/monthly/2026-11", monthly_body(plan), who=1)
+        await ledger(api, "POST", "/entries", bill_body(api, plan["items"][0]["id"]), who=1)
+        await ledger(api, "POST", "/entries", bill_body(api, None, amount=5000), who=1)
+        await ledger(
+            api,
+            "POST",
+            "/entries",
+            bill_body(api, None, type="income", categoryId="refund", amount=90000),
+            who=1,
+        )
+        removed = await ledger(api, "POST", "/entries", bill_body(api, None, amount=7000), who=1)
+        await ledger(api, "DELETE", f"/entries/{removed['id']}?version=1", who=1, expected=204)
+        value = await api.request("GET", 1, path, who=1)
+        assert value["budgetAmount"] == 10000 and value["expenseAmount"] == 17000
+        assert value["remainingAmount"] == 0 and value["overAmount"] == 7000
+        assert (await api.request("GET", 1, "/monthly/2026-12/summary", who=1))[
+            "expenseAmount"
+        ] == 0
+        await api.request("GET", 1, path, who=2, expected=404)
+        await api.request("GET", 1, path, who=None, expected=401)
+        await api.request(
+            "DELETE", 1, "/monthly/2026-11", {"requestId": str(uuid4()), "version": 1}, who=1
+        )
+        deleted = await api.request("GET", 1, path, who=1)
+        assert deleted["state"] == "not_set" and deleted["budgetAmount"] is None
+        assert deleted["expenseAmount"] == 17000 and deleted["remainingAmount"] is None
+        assert deleted["overAmount"] is None and deleted["version"] == 2
+
+
+def test_summary_query_count_does_not_grow_with_budget_items(monkeypatch):
+    run_case(monkeypatch, summary_cost_case)
+
+
+async def summary_cost_case(clock):
+    async with local_api() as api:
+        plan = plan_for(api)
+        engine = api.sessions.kw["bind"].sync_engine
+        statements = []
+
+        def capture(conn, cursor, statement, parameters, context, many):
+            statements.append(statement)
+
+        counts = []
+        for size in (1, 100):
+            plan["items"] = [
+                {**plan["items"][0], "id": str(uuid4()), "name": f"项目{i}"} for i in range(size)
+            ]
+            await api.request("PUT", 1, "/monthly/2026-11", monthly_body(plan, len(counts)), who=1)
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                statements.clear()
+                value = await api.request("GET", 1, "/monthly/2026-11/summary", who=1)
+                counts.append(len(statements))
+                assert value["budgetAmount"] == size * 10000
+                assert not any(
+                    name in " ".join(statements).lower()
+                    for name in (
+                        "budget_fund_records",
+                        "budget_projects",
+                        "budget_revisions",
+                        "budget_entry_links",
+                    )
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+        assert counts == [4, 4]

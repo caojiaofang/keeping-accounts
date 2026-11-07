@@ -22,6 +22,7 @@ from app.schemas.budget import (
     BudgetImpactResponse,
     BudgetMonthExecution,
     BudgetMonthResponse,
+    BudgetMonthSummary,
     BudgetPlanResponse,
     BudgetProjectPage,
     ConfirmBudgetMonth,
@@ -92,6 +93,15 @@ def get_budget_execution_service(service: Budget) -> BudgetExecutionService:
 
 
 ExecutionBudget = Annotated[BudgetExecutionService, Depends(get_budget_execution_service)]
+
+
+@router.get(
+    "/monthly/{month}/summary",
+    response_model=BudgetMonthSummary,
+    summary="轻量读取卡片预算总额、已用、剩余和超支",
+)
+async def monthly_summary(book_id: UUID, month: BudgetMonthKey, service: MonthBudget):
+    return await service.month_summary(book_id, month)
 
 
 @router.get(

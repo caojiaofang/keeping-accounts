@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onHide } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
-import { useBudgetStore } from '@/store/budget'
+import { useBudgetSummaryStore } from '@/store/budget-summary'
 import { useLedgerStore } from '@/store/ledger'
 import { money, monthLabel } from '@/common/utils/format'
-import { monthlyBudgetUsage } from '@/common/services/monthly-budget'
-const ledger = useLedgerStore(), budget = useBudgetStore()
-const pending = ref(false)
-const usage = computed(() => budget.execution ? monthlyBudgetUsage(budget.execution) : null)
-const configured = computed(() => budget.month?.state === 'confirmed' && !!usage.value)
+const ledger = useLedgerStore(), budget = useBudgetSummaryStore()
+const visible = ref(true)
+const usage = computed(() => budget.data ? { amount: budget.data.budgetAmount || 0, spent: budget.data.expenseAmount, remaining: budget.data.remainingAmount || 0, over: budget.data.overAmount || 0 } : null)
+const configured = computed(() => budget.data?.state === 'confirmed' && !!usage.value)
 const exceeded = computed(() => configured.value && (usage.value?.over || 0) > 0)
 const usedPercent = computed(() => {
   if (!configured.value || !usage.value) return null
@@ -17,26 +16,22 @@ const usedPercent = computed(() => {
   return Math.round(usage.value.spent / usage.value.amount * 1000) / 10
 })
 const progress = computed(() => configured.value && usage.value ? usage.value.amount ? Math.min(100, usage.value.spent / usage.value.amount * 100) : usage.value.spent ? 100 : 0 : 0)
-const available = computed(() => !!budget.month && !!usage.value)
+const available = computed(() => !!budget.data && !!usage.value)
 const footer = computed(() => {
-  if (budget.error || budget.refreshError) return '更新失败，点击重试'
-  if (!available.value) return pending.value || budget.loading ? '正在读取预算…' : '点击查看月度预算'
+  if (budget.error) return '更新失败，点击重试'
+  if (!available.value) return budget.loading ? '正在读取预算…' : '点击查看月度预算'
   if (!configured.value) return '设置预算，也可沿用上月'
   return usedPercent.value === null ? '当前支出已超出预算' : `预算已用 ${usedPercent.value}%`
 })
-let currentKey = '', task: Promise<unknown> | undefined
 function refresh() {
-  if (ledger.accountId && !ledger.cloudReady) return
-  const key = `${ledger.accountId}:${ledger.activeBookId}:${ledger.selectedMonth}`
-  if (task && key === currentKey) return task
-  currentKey = key; pending.value = true
-  const run = budget.load().finally(() => { if (task === run) { pending.value = false; task = undefined } })
-  task = run; return run
+  if (!visible.value || (ledger.accountId && !ledger.cloudReady)) return
+  return budget.load()
 }
-watch(() => [ledger.accountId, ledger.activeBookId, ledger.selectedMonth, ledger.cloudReady], refresh, { immediate: true, flush: 'post' })
-onShow(refresh)
+watch(() => [ledger.accountId, ledger.activeBookId, ledger.selectedMonth, ledger.cloudReady, budget.revision], refresh, { immediate: true, flush: 'post' })
+onShow(() => { visible.value = true; void refresh() })
+onHide(() => { visible.value = false })
 function open() { uni.navigateTo({ url: '/pages/budget-overview/index' }) }
-function activate() { if (budget.error || budget.refreshError) void refresh(); else open() }
+function activate() { if (budget.error) void budget.load(true); else open() }
 </script>
 <template>
   <button class="family-budget-card" :class="{ 'is-exceeded': exceeded, 'is-empty': !configured }" :aria-label="`${monthLabel(ledger.selectedMonth)}${ledger.activeBook.name}预算，${budget.error ? '点击重试' : '点击查看详情'}`" @tap="activate">

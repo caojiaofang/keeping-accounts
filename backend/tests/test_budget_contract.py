@@ -222,6 +222,7 @@ def test_budget_routes_keep_legacy_api_and_include_actual_execution():
         prefix + "/months/{month}",
         prefix + "/monthly/{month}",
         prefix + "/monthly/{month}/execution",
+        prefix + "/monthly/{month}/summary",
         prefix + "/months/{month}/confirm",
         prefix + "/equalizations/preview",
         prefix + "/equalizations",

@@ -234,6 +234,19 @@ class BudgetMonthResponse(LedgerSchema):
         return self
 
 
+class BudgetMonthSummary(LedgerSchema):
+    schema_version: Literal[1] = 1
+    book_id: UUID
+    month: BudgetMonth
+    state: Literal["not_set", "confirmed"]
+    version: BudgetVersion
+    budget_amount: BudgetUnsignedInteger | None
+    expense_amount: BudgetUnsignedInteger
+    remaining_amount: BudgetUnsignedInteger | None
+    over_amount: BudgetUnsignedInteger | None
+    generated_at: BudgetUnsignedInteger
+
+
 class BudgetMonthAmount(LedgerSchema):
     month: BudgetMonth
     amount: BudgetUnsignedInteger

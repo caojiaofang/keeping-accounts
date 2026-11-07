@@ -8,6 +8,7 @@ import type * as B from '@/common/types/budget'
 import type { Book, Entry } from '@/common/types'
 import { canManageBook, canEditEntry, canWriteBook } from '@/common/services/shared-books'
 import { newId } from '@/common/utils/id'
+import { useBudgetSummaryStore } from '@/store/budget-summary'
 
 type WriteMethod = 'deleteMonthly' | 'saveMonthly' | 'savePlan' | 'confirm' | 'updateMonth' | 'equalize' | 'fund' | 'correctFund' | 'createGoal' | 'updateGoal' | 'setLink' | 'removeLink'
 type ReadMethod = Exclude<keyof BudgetApi, WriteMethod>
@@ -24,6 +25,7 @@ export const useBudgetStore = defineStore('budget', () => {
   let source: BudgetApi | undefined
   let connectedKey = ''
   let pending: { method: WriteMethod; args: unknown[]; key: string } | undefined
+  let loadTask: Promise<boolean> | undefined
   const demoSources = new Map<string, BudgetApi>()
   function apiForBook(book: Book): BudgetApi {
     if (context?.accountId) {
@@ -39,12 +41,12 @@ export const useBudgetStore = defineStore('budget', () => {
     return demoSources.get(key)!
   }
   function clear() { plan.value = null; month.value = null; execution.value = null; detail.value = null; projects.value = null }
-  function invalidate() { epoch++; readRevision++; detailRevision++; reads = 0; loading.value = false; writing.value = false; clear() }
+  function invalidate() { epoch++; readRevision++; detailRevision++; reads = 0; loadTask = undefined; loading.value = false; writing.value = false; clear() }
   function scopeKey(c: Context) { return JSON.stringify([API_BASE_URL, c.accountId, c.token, c.book, c.month, c.ready]) }
   function connect(next: Context, getEntries: () => Entry[]) {
     entries = getEntries
     const nextKey = scopeKey(next)
-    if (context && connectedKey === nextKey) { context = next; return }
+    if (context && connectedKey === nextKey) { context = next; useBudgetSummaryStore().connect(next, source); return }
     invalidate(); writing.value = false; pending = undefined; pendingMethod.value = null; retryAvailable.value = false
     error.value = ''; refreshError.value = ''; notice.value = ''; conflict.value = false
     context = next
@@ -59,6 +61,7 @@ export const useBudgetStore = defineStore('budget', () => {
       }
       source = demoSources.get(key)
     }
+    useBudgetSummaryStore().connect(next, source)
   }
   async function query<K extends ReadMethod>(method: K, ...args: Parameters<BudgetApi[K]>): Promise<Awaited<ReturnType<BudgetApi[K]>> | undefined> {
     if (!source) { error.value = '请先连接云端账本'; return undefined }
@@ -76,16 +79,22 @@ export const useBudgetStore = defineStore('budget', () => {
       return undefined
     } finally { if (generation === epoch) { reads--; loading.value = reads > 0 } }
   }
-  async function load() {
+  function load(): Promise<boolean> {
     const c = context
-    if (!c) return false
+    if (!c) return Promise.resolve(false)
+    if (loadTask) return loadTask
     const generation = epoch, revision = ++readRevision
     error.value = ''
-    const values = await Promise.all([query('plan'), query('monthly', c.month), query('monthlyExecution', c.month), query('projects')])
-    if (generation !== epoch || revision !== readRevision || values.some(v => v === undefined)) return false
-    ;[plan.value, month.value, execution.value, projects.value] = values as [B.BudgetPlanResponse, B.BudgetMonthResponse, B.BudgetMonthExecution, B.BudgetProjectPage]
-    conflict.value = false; refreshError.value = ''
-    return true
+    const run = (async () => {
+      const values = await Promise.all([query('plan'), query('monthly', c.month), query('monthlyExecution', c.month), query('projects')])
+      if (generation !== epoch || revision !== readRevision || values.some(v => v === undefined)) return false
+      ;[plan.value, month.value, execution.value, projects.value] = values as [B.BudgetPlanResponse, B.BudgetMonthResponse, B.BudgetMonthExecution, B.BudgetProjectPage]
+      conflict.value = false; refreshError.value = ''
+      return true
+    })()
+    loadTask = run
+    void run.finally(() => { if (loadTask === run) loadTask = undefined })
+    return run
   }
   async function loadDetail(itemId: string, beforeRecordId?: string, beforeEntryId?: string) {
     const revision = ++detailRevision
@@ -100,12 +109,13 @@ export const useBudgetStore = defineStore('budget', () => {
     const entry = isLink ? entries().find(e => e.id === args[0] && e.bookId === context!.book.id) : undefined
     if (isLink ? !entry || !canEditEntry(context.book, entry) : isMonthly ? !canWriteBook(context.book) : !canManageBook(context.book)) { error.value = isLink ? '只能关联有权编辑的账单' : isMonthly ? '只有有效账本成员可以管理月预算' : '只有账本创建者可以修改预算'; return undefined }
     const c = context, generation = ++epoch, key = scopeKey(c), api = source, item = detail.value?.item.id
-    reads = 0; loading.value = false; readRevision++
+    reads = 0; loading.value = false; readRevision++; loadTask = undefined
     pending = { method, args: clone(args), key }; pendingMethod.value = method; retryAvailable.value = false
     writing.value = true; error.value = ''; conflict.value = false; refreshError.value = ''
     try {
       const result = await (api[method] as (...values: unknown[]) => Promise<unknown>)(...clone(args))
       if (generation !== epoch || !context || key !== scopeKey(context)) return undefined
+      useBudgetSummaryStore().invalidate()
       pending = undefined; pendingMethod.value = null; clear()
       await load()
       if (item && generation === epoch) await loadDetail(item)
@@ -130,12 +140,16 @@ export const useBudgetStore = defineStore('budget', () => {
   }
   function retry() { return pending && context && pending.key === scopeKey(context) ? execute(pending.method, pending.args) : Promise.resolve(undefined) }
   function ledgerChanged(message = '') {
+    useBudgetSummaryStore().invalidate()
     const wasLoaded = !!month.value || !!detail.value, item = detail.value?.item.id
     notice.value = message
     // 账单更新只使视图过期，不能丢弃在途保存或解除写入锁；保存完成后会统一重读。
     if (writing.value) { readRevision++; detailRevision++; clear(); return }
     invalidate()
-    if (wasLoaded && !writing.value) void load().then(() => item ? loadDetail(item) : undefined)
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+    const route = pages[pages.length - 1]?.route || ''
+    // 仅当前可见的预算详情需要完整数据；明细和「我的」交给摘要卡片刷新。
+    if (wasLoaded && route.startsWith('pages/budget-')) void load().then(() => item ? loadDetail(item) : undefined)
   }
   function resetDemo() { demoSources.clear(); if (context && !context.accountId) { uni.removeStorageSync(`moji-budget-demo-v1:${context.book.id}`); const c = context; context = undefined; connect(c, entries) } }
   return { plan, month, execution, detail, projects, loading, writing, error, refreshError, conflict, notice, retryAvailable, pendingMethod, connect, invalidate, load, loadDetail, query, write, retry, ledgerChanged, resetDemo, apiForBook, newRequestId: newId }

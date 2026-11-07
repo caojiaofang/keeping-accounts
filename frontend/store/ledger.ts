@@ -129,7 +129,8 @@ export const useLedgerStore = defineStore('ledger', () => {
         if (version !== revision) return false
         if (!Array.isArray(state.books) || !state.books.length || !Array.isArray(state.entries)) throw new Error('账本响应不完整，请重试')
         books.value = state.books
-        entries.value = state.entries
+        // 相同账单不替换引用，避免进入页面刷新时重复触发预算失效和网络请求。
+        if (JSON.stringify(entries.value) !== JSON.stringify(state.entries)) entries.value = state.entries
         invitations.value = invitations.value.filter(invite => books.value.some(book => book.id === invite.bookId && canManageBook(book)))
         if (!books.value.some(book => book.id === activeBookId.value)) activeBookId.value = books.value[0].id
         cloudReady.value = true
