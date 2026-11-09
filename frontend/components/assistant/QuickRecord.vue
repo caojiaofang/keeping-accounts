@@ -7,7 +7,7 @@ import { categories } from '@/common/data/categories'
 import { recordExamples } from '@/common/mock/assistant'
 import type { AssistantDraft } from '@/common/mock/assistant'
 import type { RecordImage } from '@/common/types/record'
-import { chooseRecordImage } from '@/common/services/record-image'
+import { chooseRecordImage, getRecordImagePrivacy } from '@/common/services/record-image'
 import { money, toast } from '@/common/utils/format'
 
 defineOptions({ options: { virtualHost: true } })
@@ -17,6 +17,7 @@ const input = ref('')
 const attachment = ref<RecordImage>()
 const choosing = ref(false)
 const inputError = ref('')
+const privacyContractName = ref('')
 const anchor = ref('')
 const editingKey = ref('')
 const form = ref<AssistantDraft & { amountText: string }>()
@@ -32,6 +33,7 @@ function clearComposer() {
   attachment.value = undefined
   choosing.value = false
   inputError.value = ''
+  privacyContractName.value = ''
   editingKey.value = ''
   form.value = undefined
 }
@@ -64,11 +66,27 @@ async function chooseImage() {
   choosing.value = true
   inputError.value = ''
   try {
+    const privacy = await getRecordImagePrivacy()
+    if (version !== selectionRevision) return
+    if (privacy?.needAuthorization) {
+      privacyContractName.value = privacy.privacyContractName || '《用户隐私保护指引》'
+      return
+    }
     const image = await chooseRecordImage()
     if (version === selectionRevision && image) attachment.value = image
   } catch (cause) {
     if (version === selectionRevision) inputError.value = cause instanceof Error ? cause.message : '图片读取失败，请重新选择'
   } finally { if (version === selectionRevision) choosing.value = false }
+}
+function agreeImagePrivacy() {
+  if (!privacyContractName.value) return
+  privacyContractName.value = ''
+  void chooseImage()
+}
+function openImagePrivacy() {
+  // #ifdef MP-WEIXIN
+  uni.openPrivacyContract({ fail: () => { toast('隐私保护指引暂时无法打开，请稍后重试') } })
+  // #endif
 }
 function previewImage(path: string) { uni.previewImage({ urls: [path], current: path }) }
 function chooseExample(text: string) { if (!blocked.value) { input.value = text; inputError.value = '' } }
@@ -109,6 +127,15 @@ function login() { uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2
 
 <template>
   <view class="record-panel">
+    <!-- #ifdef MP-WEIXIN -->
+    <view v-if="privacyContractName" class="sheet-mask" @tap="privacyContractName = ''"><view class="sheet privacy-sheet" @tap.stop>
+      <view class="sheet-handle" /><text class="sheet-title">使用图片记账</text>
+      <text class="privacy-description">为识别账单，需要使用你主动选择或拍摄的图片。点击发送后，图片会发给模型服务用于生成记账草稿。</text>
+      <button class="privacy-link" @tap="openImagePrivacy">阅读{{ privacyContractName }}</button>
+      <button class="primary-button" open-type="agreePrivacyAuthorization" @agreeprivacyauthorization="agreeImagePrivacy">同意并选择图片</button>
+      <button class="privacy-cancel" @tap="privacyContractName = ''">暂不使用</button>
+    </view></view>
+    <!-- #endif -->
     <view class="record-toolbar"><text>{{ record.pending.length ? `${record.pending.length} 笔待确认 · 可以继续补充` : '文字、截图、小票，都可以发给我' }}</text><button :disabled="blocked" @tap="startNew"><AppIcon name="plus" :size="23" />新对话</button></view>
     <scroll-view scroll-y class="record-scroll" :scroll-into-view="anchor" scroll-with-animation>
       <view class="record-body">
@@ -236,4 +263,8 @@ function login() { uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2
 .time-picker { flex: 1; text-align: right; font-size: 25rpx; }
 .clear-time { display: flex; padding: 10rpx; }
 .apply-edit { margin-top: 26rpx; }
+.privacy-sheet .sheet-title { display: block; }
+.privacy-description { display: block; font-size: 25rpx; line-height: 1.8; color: #657e70; margin-top: 20rpx; }
+.privacy-link { color: #285e4e; font-size: 25rpx; text-align: left; padding: 24rpx 0; }
+.privacy-cancel { color: #7a9083; font-size: 25rpx; width: 100%; padding: 24rpx 0 0; }
 </style>

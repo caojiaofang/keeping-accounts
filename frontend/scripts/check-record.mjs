@@ -24,7 +24,7 @@ async function moduleUrl(filename) {
 globalThis.uni = { getAccountInfoSync: () => ({}), showToast() {} }
 const { useLedgerStore } = await import(await moduleUrl(path.join(root, 'store/ledger.ts')))
 const { useRecordStore } = await import(await moduleUrl(path.join(root, 'store/record.ts')))
-const { imageDataUrl, chooseRecordImage, MAX_IMAGE_BYTES } = await import(await moduleUrl(path.join(root, 'common/services/record-image.ts')))
+const { imageDataUrl, chooseRecordImage, getRecordImagePrivacy, MAX_IMAGE_BYTES } = await import(await moduleUrl(path.join(root, 'common/services/record-image.ts')))
 const { recordExamples } = await import(await moduleUrl(path.join(root, 'common/mock/assistant.ts')))
 const clone = value => JSON.parse(JSON.stringify(value))
 const image = { path: 'local-receipt.png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=' }
@@ -208,6 +208,39 @@ await check('图片类型与体积在读取和上传前校验，取消选择不�
   uni.getFileSystemManager = () => ({ getFileInfo: options => options.success({ size: MAX_IMAGE_BYTES + 1 }), readFile() { reads++ } })
   await assert.rejects(chooseRecordImage(), /4 MB/)
   assert.equal(reads, 0)
+})
+
+await check('隐私声明、隐私授权、设备权限和普通选图失败分别提示', async () => {
+  for (const [errMsg, expected] of [
+    ['chooseMedia:fail api scope is not declared in the privacy agreement', /隐私声明/],
+    ['chooseMedia:fail privacy permission is not authorized', /隐私授权/],
+    ['chooseMedia:fail auth deny', /相册或相机访问被拒绝/],
+    ['chooseMedia:fail permission denied', /相册或相机访问被拒绝/],
+    ['chooseMedia:fail unknown error', /暂时无法选择图片/],
+  ]) {
+    uni.chooseMedia = options => options.fail({ errMsg })
+    await assert.rejects(chooseRecordImage(), expected)
+  }
+})
+
+await check('查询微信隐私状态不缓存授权，查询失败可重试，旧基础库兼容', async () => {
+  assert.equal(await getRecordImagePrivacy(), undefined)
+  uni.getPrivacySetting = options => options.success({ needAuthorization: true, privacyContractName: '《墨记助手小程序隐私保护指引》' })
+  assert.deepEqual(await getRecordImagePrivacy(), { needAuthorization: true, privacyContractName: '《墨记助手小程序隐私保护指引》' })
+  uni.getPrivacySetting = options => options.success({ needAuthorization: false, privacyContractName: '' })
+  assert.equal((await getRecordImagePrivacy()).needAuthorization, false)
+  uni.getPrivacySetting = options => options.fail({ errMsg: 'getPrivacySetting:fail network error' })
+  await assert.rejects(getRecordImagePrivacy(), /暂时无法选择图片/)
+  delete uni.getPrivacySetting
+})
+
+await check('选图成功后返回图片预览路径及有效图片内容', async () => {
+  uni.chooseMedia = options => options.success({ tempFiles: [{ tempFilePath: image.path, size: 100 }] })
+  uni.getFileSystemManager = () => ({
+    getFileInfo: options => options.success({ size: 100 }),
+    readFile: options => options.success({ data: 'iVBORw0KGgo=' }),
+  })
+  assert.deepEqual(await chooseRecordImage(), image)
 })
 
 console.log(`连续记账与图片检查完成：${passed} 项通过；仅使用内存数据和模拟接口。`)
