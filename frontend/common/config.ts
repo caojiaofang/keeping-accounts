@@ -1,7 +1,7 @@
 // 前端只保存公开地址，微信 AppSecret 始终由后端管理。
 const PROD_BASE_URL = 'https://mjzs.zf-yun.cn'
 // 真机开发时改为手机可访问的本地开发服务器地址。
-const DEV_BASE_URL = 'http://127.0.0.1:8000'
+const DEV_BASE_URL = 'https://mjzs.zf-yun.cn'
 
 const envNames = new Map([
   ['develop', '开发版'],
