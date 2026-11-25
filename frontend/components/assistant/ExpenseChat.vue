@@ -4,7 +4,6 @@ import AppIcon from '@/components/AppIcon.vue'
 import ResultCard from './cards/ResultCard.vue'
 import { analysisQuestions, buildDemoAnalysis } from '@/common/mock/assistant'
 import type { AnalysisResult, AnalysisTopic } from '@/common/mock/assistant'
-import { categories } from '@/common/data/categories'
 import { useLedgerStore } from '@/store/ledger'
 import { isV2Turn, useChatStore } from '@/store/chat'
 import type { FactRefV2, ResultCardV2, SuggestionV2 } from '@/common/types/chat-v2'
@@ -14,6 +13,7 @@ import { money, monthLabel } from '@/common/utils/format'
 defineOptions({ options: { virtualHost: true } })
 const props = defineProps<{ month: string; active: boolean }>()
 const store = useLedgerStore()
+const categories = computed(() => [...store.categoriesFor(store.activeBookId, 'expense'), ...store.categoriesFor(store.activeBookId, 'income')])
 interface Message { id: number | string; role: 'user' | 'assistant'; text: string; result?: AnalysisResult; bookName?: string; cards?: ResultCardV2[]; facts?: FactRefV2[]; completeness?: 'complete' | 'partial'; missing?: string[] }
 interface Question { text: string; topic?: AnalysisTopic; categoryId?: string; suggestion?: SuggestionV2 }
 const demoMessages = ref<Message[]>([])
@@ -45,7 +45,7 @@ const rankingCategory = computed(() => {
   if (!store.accountId) return lastRankingCategory.value
   if (chat.context?.categoryId) return chat.context.categoryId
   const latest = chat.turns[chat.turns.length - 1]
-  return categories.find(category => category.type === chat.context?.entryType && category.name === (latest && !isV2Turn(latest) ? latest.result?.rows[0]?.label : undefined))?.id || (chat.context?.entryType === 'income' ? 'salary' : 'food')
+  return categories.value.find(category => category.type === chat.context?.entryType && category.name === (latest && !isV2Turn(latest) ? latest.result?.rows[0]?.label : undefined))?.id || (chat.context?.entryType === 'income' ? 'salary' : 'food')
 })
 watch([() => store.accountId, () => store.activeBookId, () => store.cloudReady, () => props.month, () => props.active], async () => {
   if (!store.accountId) { loadedScope = ''; return }
@@ -140,9 +140,9 @@ async function ask(text: string, topic?: AnalysisTopic, categoryId?: string) {
   }
   const category = resolved === 'details' ? categoryId || suggested?.categoryId || 'food' : resolved === 'compare' ? categoryId || focusCategory.value : undefined
   focusCategory.value = category
-  const result = buildDemoAnalysis(store.bookEntries, categories, props.month, resolved, category)
+  const result = buildDemoAnalysis(store.bookEntries, categories.value, props.month, resolved, category)
   if (resolved === 'overview' || resolved === 'advice') {
-    lastRankingCategory.value = categories.find(item => item.name === result.rows[0]?.label && item.type === 'expense')?.id || 'food'
+    lastRankingCategory.value = categories.value.find(item => item.name === result.rows[0]?.label && item.type === 'expense')?.id || 'food'
   }
   if (resolved === 'details' && category) lastRankingCategory.value = category
   demoMessages.value.push({ id: ++sequence.value, role: 'assistant', text: result.text, result, bookName: store.activeBook.name })
@@ -180,7 +180,7 @@ async function continueLegacy() { if (await chat.startFromLegacy()) { historyOpe
           <view v-if="message.role === 'assistant'" class="message-author"><view class="small-mark"><AppIcon name="leaf" :size="24" light /></view><text>墨记助手</text><text class="local-answer">{{ store.accountId ? '智能分析' : '本地演示' }}</text></view>
           <view class="message-bubble"><text class="message-text" selectable>{{ message.text }}</text>
             <view v-if="message.completeness === 'partial'" class="partial-note"><text>部分完成</text><text v-for="(reason, index) in message.missing" :key="index">{{ reason }}</text></view>
-            <ResultCard v-for="card in message.cards" :key="card.id" :card="card" :facts="message.facts || []" :book="store.activeBook" :partial="message.completeness === 'partial'" :interactive="message.id !== 'stream-preview'" @open="openEntry(message, card, $event)" />
+            <ResultCard v-for="card in message.cards" :key="card.id" :card="card" :facts="message.facts || []" :book="store.activeBook" :custom-categories="store.customCategories.filter(category => category.bookId === store.activeBookId)" :partial="message.completeness === 'partial'" :interactive="message.id !== 'stream-preview'" @open="openEntry(message, card, $event)" />
             <view v-if="message.result" class="answer-card">
               <text class="answer-scope">{{ message.bookName }} · {{ message.result.scope }}</text><text class="answer-title">{{ message.result.title }}</text>
               <view class="answer-total"><text class="answer-currency">¥</text><text class="answer-value number">{{ money(message.result.total) }}</text><text class="answer-count">{{ message.result.count }} 笔{{ message.result.entryType === 'income' ? '收入' : '支出' }}</text></view>

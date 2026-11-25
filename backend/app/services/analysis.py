@@ -6,31 +6,12 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 
+from app.category_catalog import CATEGORIES as CATEGORIES
 from app.core.errors import ServiceError
 from app.models.ledger import Book, LedgerEntry
 from app.schemas.chat import AnalysisCard, AnalysisRow, QueryContext, QueryPlan
-from app.schemas.ledger import EXPENSE_CATEGORIES, INCOME_CATEGORIES, MAX_CENTS
+from app.schemas.ledger import EXPENSE_CATEGORIES, INCOME_CATEGORIES, MAX_CENTS, is_custom_category
 from app.services.ledger import LedgerService
-
-CATEGORIES = {
-    "food": ("餐饮", "food", "#fbefe1"),
-    "coffee": ("咖啡茶饮", "coffee", "#eee9e3"),
-    "transport": ("交通", "bus", "#e8eefb"),
-    "shopping": ("购物", "bag", "#f6e8ec"),
-    "daily": ("日用", "basket", "#f5eddf"),
-    "house": ("住房", "home", "#e9e9f6"),
-    "play": ("娱乐", "game", "#f0eafa"),
-    "health": ("医疗", "health", "#e5f2ed"),
-    "study": ("学习", "study", "#e8f0ed"),
-    "gift": ("人情", "gift", "#faece5"),
-    "travel": ("旅行", "plane", "#e7f0f8"),
-    "other": ("其他", "more", "#eef0ef"),
-    "salary": ("工资", "wallet", "#e3f2e9"),
-    "bonus": ("奖金", "gift", "#fbefe1"),
-    "parttime": ("兼职", "work", "#e8eefb"),
-    "refund": ("退款", "return", "#f6e8ec"),
-    "other-income": ("其他", "more", "#eef0ef"),
-}
 
 
 def month_range(month: str, today: date) -> tuple[date, date]:
@@ -61,7 +42,7 @@ def resolve_context(plan: QueryPlan, previous: QueryContext, today: date) -> Que
     entry_type = plan.entry_type or previous.entry_type
     allowed = EXPENSE_CATEGORIES if entry_type == "expense" else INCOME_CATEGORIES
     if (plan.category_mode == "selected" and not category) or (
-        category and category not in allowed
+        category and category not in allowed and not is_custom_category(category)
     ):
         raise ServiceError(502, "收支分类识别不明确，请说明要查询的分类和收支类型")
     if plan.threshold is not None and not 0 <= plan.threshold <= MAX_CENTS:
@@ -107,6 +88,17 @@ class AnalysisQueries:
         self, book_id, context: QueryContext, plan: QueryPlan, today: date
     ) -> AnalysisCard:
         await self.ledger.require_book(book_id)
+        from app.services.categories import CategoryService
+
+        catalog = await CategoryService(self.ledger).catalog(book_id)
+        if context.category_id and (
+            context.category_id not in catalog
+            or catalog[context.category_id]["type"] != context.entry_type
+        ):
+            raise ServiceError(422, "分类不属于当前账本或收支类型")
+        labels = {
+            key: (value["name"], value["icon"], value["color"]) for key, value in catalog.items()
+        }
         start, end = month_range(context.month, today)
         threshold = (
             (plan.threshold if plan.threshold is not None else 20000)
@@ -165,7 +157,7 @@ class AnalysisQueries:
             total = sum(int(row[1]) for row in groups)
             count = sum(row[2] for row in groups)
         label = "支出" if context.entry_type == "expense" else "收入"
-        category = CATEGORIES[context.category_id][0] if context.category_id else "全部"
+        category = labels[context.category_id][0] if context.category_id else "全部"
         card = AnalysisCard(
             title=f"{category}{label}",
             text=f"共记录 {count} 笔{label}，合计 {yuan(total)}。",
@@ -207,7 +199,7 @@ class AnalysisQueries:
         if plan.action in {"details", "large"}:
             card.title += " · " + ("大额明细" if plan.action == "large" else "明细")
             for record in records:
-                name, icon, color = CATEGORIES[record.category_id]
+                name, icon, color = labels[record.category_id]
                 card.rows.append(
                     AnalysisRow(
                         label=record.note or name,
@@ -222,7 +214,7 @@ class AnalysisQueries:
                 card.footnote += f"金额须严格超过 {yuan(threshold)}。"
             return card
         for category_id, amount, group_count in groups:
-            name, icon, color = CATEGORIES[category_id]
+            name, icon, color = labels[category_id]
             percent = float(
                 (Decimal(amount) * 100 / Decimal(total)).quantize(
                     Decimal("0.1"), rounding=ROUND_HALF_UP

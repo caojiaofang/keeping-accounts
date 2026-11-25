@@ -1,4 +1,4 @@
-import type { Book } from '../types'
+import type { Book, Category } from '../types'
 import type { EntryFilterV2, FactRefV2 } from '../types/chat-v2'
 import { categories } from '../data/categories'
 import { formatFactV2 } from '../api/chat-v2-codec'
@@ -8,9 +8,9 @@ export function cardFacts(ids: string[], facts: FactRefV2[]): FactRefV2[] {
   return ids.flatMap(id => lookup.has(id) ? [lookup.get(id)!] : [])
 }
 
-export function filterDescriptions(filters: EntryFilterV2, book?: Book): string[] {
+export function filterDescriptions(filters: EntryFilterV2, book?: Book, customCategories: Category[] = []): string[] {
   const labels: string[] = [filters.entryType === 'both' ? '收入和支出分别统计' : filters.entryType === 'income' ? '仅收入' : '仅支出']
-  if (filters.categoryIds.length) labels.push(`分类：${filters.categoryIds.map(id => categories.find(category => category.id === id)?.name || `历史分类（${id}）`).join('、')}`)
+  if (filters.categoryIds.length) labels.push(`分类：${filters.categoryIds.map(id => [...categories, ...customCategories].find(category => category.id === id)?.name || `历史分类（${id}）`).join('、')}`)
   if (filters.keywords.include.length) labels.push(`备注${filters.keywords.mode === 'all' ? '同时包含' : '包含任意一个'}：${filters.keywords.include.join('、')}`)
   if (filters.keywords.exclude.length) labels.push(`备注不含：${filters.keywords.exclude.join('、')}`)
   if (filters.accounts.length) labels.push(`账户：${filters.accounts.join('、')}`)

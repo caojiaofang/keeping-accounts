@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -63,3 +64,35 @@ class LedgerEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class BookCategory(Base):
+    """账本专属分类；软删除后保留历史账单的分类信息。"""
+
+    __tablename__ = "book_categories"
+    __table_args__ = (
+        CheckConstraint("type IN ('expense', 'income')", name="category_valid_type"),
+        Index(
+            "ix_book_categories_active_name",
+            "book_id",
+            "type",
+            "name",
+            unique=True,
+            postgresql_where=text("NOT is_deleted"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    book_id: Mapped[UUID] = mapped_column(ForeignKey("books.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(12), nullable=False)
+    icon: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="tag", server_default="tag"
+    )
+    color: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="#e1eee7", server_default="#e1eee7"
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )

@@ -127,7 +127,7 @@ def test_drafts_are_validated_without_writing_entries(variant):
         ledger = SimpleNamespace(
             user_id=uuid4(),
             require_book=AsyncMock(),
-            session=SimpleNamespace(rollback=AsyncMock()),
+            session=SimpleNamespace(rollback=AsyncMock(), scalars=AsyncMock(return_value=[])),
             create_entry=AsyncMock(),
         )
         llm = SimpleNamespace(structured=AsyncMock(return_value=result))

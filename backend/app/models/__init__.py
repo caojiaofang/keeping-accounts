@@ -13,7 +13,7 @@ from app.models.budget import (
     BudgetRevision,
 )
 from app.models.chat import ChatConversation, ChatTurn
-from app.models.ledger import Book, LedgerEntry
+from app.models.ledger import Book, BookCategory, LedgerEntry
 from app.models.shared import BookActivity, BookInvitation, BookMember
 from app.models.user import User
 
@@ -21,6 +21,7 @@ __all__ = [
     "AdminAccount",
     "AdminAuditEvent",
     "Book",
+    "BookCategory",
     "BookActivity",
     "BookInvitation",
     "BookMember",

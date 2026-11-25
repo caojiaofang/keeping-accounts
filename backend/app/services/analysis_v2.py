@@ -20,7 +20,7 @@ from app.schemas.chat_v2 import (
     EntryFilter,
     KeywordFilter,
 )
-from app.schemas.ledger import EXPENSE_CATEGORIES, INCOME_CATEGORIES
+from app.schemas.ledger import EXPENSE_CATEGORIES, INCOME_CATEGORIES, is_custom_category
 from app.services.ledger import LedgerService
 
 
@@ -135,7 +135,7 @@ def normalize_filter(
         if value.entry_type == "income"
         else EXPENSE_CATEGORIES | INCOME_CATEGORIES
     )
-    if set(value.category_ids) - allowed:
+    if any(key not in allowed and not is_custom_category(key) for key in value.category_ids):
         raise ServiceError(422, "分类不存在或与收支类型不匹配，请重新选择")
     if (
         value.amount_min is not None
@@ -184,6 +184,19 @@ class FilterQueriesV2:
     async def prepare(self, book_id: UUID, value: EntryFilter) -> PreparedFilter:
         book = await self.ledger.require_book(book_id)
         value, notices = normalize_filter(value, today=self.today, max_days=self.max_days)
+        if value.category_ids:
+            from app.services.categories import CategoryService
+
+            for category_id in value.category_ids:
+                if is_custom_category(category_id):
+                    if value.entry_type == "both":
+                        catalog = await CategoryService(self.ledger).catalog(book_id)
+                        if category_id not in catalog:
+                            raise ServiceError(422, "分类不属于当前账本")
+                    else:
+                        await CategoryService(self.ledger).validate(
+                            book_id, category_id, value.entry_type, history=True
+                        )
         if value.creator_ids:
             if book.kind == "personal":
                 allowed_creators = {book.owner_id}

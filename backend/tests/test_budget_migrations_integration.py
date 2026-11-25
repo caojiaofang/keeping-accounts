@@ -118,8 +118,13 @@ def migration_roundtrip(connection):
 
     command.upgrade(config, "head")
     assert (
-        connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009_budget_deletion"
+        connection.scalar(text("SELECT version_num FROM alembic_version"))
+        == "0011_savings_assistant"
     )
+    assert {"savings_workspaces", "savings_plans", "savings_mutations"} <= set(
+        inspect(connection).get_table_names()
+    )
+    command.check(config)
     assert (
         connection.execute(select(Book.id, Book.name, Book.budget).order_by(Book.id)).all()
         == baseline
@@ -153,7 +158,7 @@ def validate_metadata(connection):
             "compare_type": True,
             "compare_server_default": True,
             "include_object": lambda obj, name, kind, reflected, other: (
-                kind != "table" or name.startswith("budget_")
+                kind != "table" or name.startswith("budget_") or name == "book_categories"
             ),
         },
     )

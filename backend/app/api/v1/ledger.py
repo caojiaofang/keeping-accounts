@@ -11,11 +11,14 @@ from app.api.deps import get_db
 from app.core.errors import ServiceError
 from app.schemas.ledger import (
     BookResponse,
+    CategoryResponse,
     CreateBook,
+    CreateCategory,
     CreateEntry,
     EntryResponse,
     LedgerResponse,
     UpdateBudget,
+    UpdateCategory,
     UpdateEntry,
 )
 from app.services.auth import AuthService
@@ -88,3 +91,38 @@ async def update_entry(entry_id: UUID, body: UpdateEntry, service: Ledger):
 @router.delete("/entries/{entry_id}", status_code=204, summary="删除账单，可安全重试")
 async def delete_entry(entry_id: UUID, service: Ledger, version: Annotated[int, Query(ge=1)]):
     await service.delete_entry(entry_id, version)
+
+
+@router.post(
+    "/books/{book_id}/categories",
+    response_model=CategoryResponse,
+    summary="新增账本专属分类，同一 ID 防重复",
+)
+async def create_category(book_id: UUID, body: CreateCategory, service: Ledger):
+    from app.services.categories import CategoryService
+
+    return await CategoryService(service).create(book_id, body)
+
+
+@router.put(
+    "/books/{book_id}/categories/{category_id}",
+    response_model=CategoryResponse,
+    summary="修改账本专属分类名称",
+)
+async def update_category(book_id: UUID, category_id: str, body: UpdateCategory, service: Ledger):
+    from app.services.categories import CategoryService
+
+    return await CategoryService(service).change(book_id, category_id, body.version, name=body.name)
+
+
+@router.delete(
+    "/books/{book_id}/categories/{category_id}",
+    response_model=CategoryResponse,
+    summary="删除专属分类，保留历史账单",
+)
+async def delete_category(
+    book_id: UUID, category_id: str, service: Ledger, version: Annotated[int, Query(ge=1)]
+):
+    from app.services.categories import CategoryService
+
+    return await CategoryService(service).change(book_id, category_id, version)

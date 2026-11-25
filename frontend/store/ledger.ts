@@ -3,7 +3,7 @@ import { useBudgetStore } from '@/store/budget'
 import { defineStore } from 'pinia'
 import { categories } from '@/common/data/categories'
 import { createDemoEntries, initialBooks } from '@/common/mock/ledger'
-import type { Book, BookActivity, BookInvitation, Entry } from '@/common/types'
+import type { Book, BookActivity, BookInvitation, BookCategory, Entry, EntryType } from '@/common/types'
 import { localDate, toast } from '@/common/utils/format'
 import { canEditEntry, canManageBook, canWriteBook, DEMO_USER_ID, familyExample, newSharedBook, validInvitation } from '@/common/services/shared-books'
 import { API_BASE_URL, apiRequest } from '@/common/api/request'
@@ -21,10 +21,12 @@ interface StoredState {
   books: Book[]
   activeBookId: string
   invitations?: BookInvitation[]
+  customCategories?: BookCategory[]
 }
 
 export const useLedgerStore = defineStore('ledger', () => {
   const entries = ref<Entry[]>([])
+  const customCategories = ref<BookCategory[]>([])
   const books = ref<Book[]>(initialBooks.map(book => ({ ...book })))
   const activeBookId = ref('daily')
   const selectedMonth = ref(localDate().slice(0, 7))
@@ -65,6 +67,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     pendingCreates.clear()
     accountId.value = userId
     entries.value = []
+    customCategories.value = []
     books.value = (userId ? initialBooks.slice(0, 1) : initialBooks).map(book => ({ ...book }))
     invitations.value = []
     activeBookId.value = 'daily'
@@ -88,7 +91,7 @@ export const useLedgerStore = defineStore('ledger', () => {
 
   function persist(): void {
     try {
-      uni.setStorageSync(preferenceKey('ledger'), { entries: entries.value, books: books.value, activeBookId: activeBookId.value, invitations: invitations.value })
+      uni.setStorageSync(preferenceKey('ledger'), { entries: entries.value, books: books.value, activeBookId: activeBookId.value, invitations: invitations.value, customCategories: customCategories.value })
       storageAvailable.value = true
     } catch {
       storageAvailable.value = false
@@ -103,6 +106,7 @@ export const useLedgerStore = defineStore('ledger', () => {
       const saved = uni.getStorageSync(preferenceKey('ledger')) as StoredState | undefined
       if (saved && Array.isArray(saved.entries) && Array.isArray(saved.books) && saved.books.length) {
         entries.value = saved.entries
+        customCategories.value = Array.isArray(saved.customCategories) ? saved.customCategories : []
         books.value = saved.books
         invitations.value = Array.isArray(saved.invitations) ? saved.invitations : []
         activeBookId.value = saved.books.some(book => book.id === saved.activeBookId) ? saved.activeBookId : saved.books[0].id
@@ -128,6 +132,7 @@ export const useLedgerStore = defineStore('ledger', () => {
         const state = await apiRequest<StoredState>('/api/v1/ledger', { token })
         if (version !== revision) return false
         if (!Array.isArray(state.books) || !state.books.length || !Array.isArray(state.entries)) throw new Error('账本响应不完整，请重试')
+        customCategories.value = state.customCategories || []
         books.value = state.books
         // 相同账单不替换引用，避免进入页面刷新时重复触发预算失效和网络请求。
         if (JSON.stringify(entries.value) !== JSON.stringify(state.entries)) entries.value = state.entries
@@ -224,6 +229,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     if (!book || !canWriteBook(book, user)) throw new Error('当前已无法访问这个账本，可能已退出或被移出')
     const entry = state.entries.find(item => item.id === id && item.bookId === bookId)
     if (!entry) throw new Error('这笔账单已删除或移出当前账本；历史回答保留原统计快照')
+    customCategories.value = [...customCategories.value.filter(item => item.bookId !== bookId), ...(state.customCategories || []).filter(item => item.bookId === bookId)]
     books.value = books.value.map(item => item.id === bookId ? book : item)
     entries.value = [...entries.value.filter(item => item.id !== id), entry]
     persist()
@@ -243,6 +249,10 @@ export const useLedgerStore = defineStore('ledger', () => {
   function saveEntry(entry: Omit<Entry, 'id' | 'createdAt' | 'createdBy' | 'updatedBy' | 'updatedAt'> & { budgetItemId?: string | null; budgetLinkVersion?: number }, id?: string, requestId?: string): boolean | Promise<boolean> {
     const targetBook = books.value.find(book => book.id === entry.bookId)
     if (!canWriteBook(targetBook)) { toast('你还不是这个账本的成员'); return false }
+    const customCategory = customCategories.value.find(item => item.id === entry.categoryId)
+    const category = categories.find(item => item.id === entry.categoryId) || customCategory
+    const originalCategory = id ? entries.value.find(item => item.id === id) : undefined
+    if (!category || category.type !== entry.type || (customCategory && (customCategory.bookId !== entry.bookId || (customCategory.isDeleted && !(originalCategory?.categoryId === category.id && originalCategory.bookId === entry.bookId && originalCategory.type === entry.type))))) { toast('请选择当前账本可用的收支分类'); return false }
     if (!accountId.value && entry.budgetItemId !== undefined) return saveLocalBudget(entry, id, requestId)
     if (accountId.value) {
       const original = id ? entries.value.find(item => item.id === id) : undefined
@@ -431,6 +441,7 @@ export const useLedgerStore = defineStore('ledger', () => {
   function purgeBook(id: string): void {
     books.value = books.value.filter(book => book.id !== id)
     entries.value = entries.value.filter(entry => entry.bookId !== id)
+    customCategories.value = customCategories.value.filter(category => category.bookId !== id)
     invitations.value = invitations.value.filter(invite => invite.bookId !== id)
     if (activeBookId.value === id) activeBookId.value = books.value[0]?.id || 'daily'
   }
@@ -454,6 +465,7 @@ export const useLedgerStore = defineStore('ledger', () => {
 
   function resetDemo(): void {
     if (accountId.value) { toast('请在体验模式中恢复演示数据'); return }
+    customCategories.value = []
     entries.value = createDemoEntries()
     books.value = initialBooks.map(book => ({ ...book }))
     invitations.value = []
@@ -469,8 +481,42 @@ export const useLedgerStore = defineStore('ledger', () => {
   watch(entries, () => useBudgetStore().ledgerChanged(), { deep: true, flush: 'sync' })
 
   function categoryOf(id: string) {
-    return categories.find(category => category.id === id) || categories[11]
+    return categories.find(category => category.id === id) || customCategories.value.find(category => category.id === id) || categories[11]
   }
 
-  return { entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, readEntryReference, recognizeDrafts, recordDrafts, chatRequest, streamChat, streamChatV2, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
+  function categoriesFor(bookId: string, type: EntryType, retainedId?: string) {
+    return [...categories.filter(category => category.type === type), ...customCategories.value.filter(category => category.bookId === bookId && category.type === type && (!category.isDeleted || category.id === retainedId))]
+  }
+
+  async function saveCategory(bookId: string, type: EntryType, name: string, original?: BookCategory): Promise<boolean> {
+    name = name.trim()
+    if (!name || [...name].length > 12) { toast('分类名称需为 1 至 12 个字'); return false }
+    if (!canWriteBook(books.value.find(book => book.id === bookId))) { toast('你已无权管理这个账本的分类'); return false }
+    if (original && (original.bookId !== bookId || original.type !== type || original.isDeleted)) { toast('分类已变化，请刷新后重试'); return false }
+    if (categoriesFor(bookId, type).some(category => category.name === name && category.id !== original?.id)) { toast('已有同名分类，请换一个名称'); return false }
+    const key = `category:${bookId}:${type}:${name}`
+    const id = original?.id || pendingCreates.get(key) || `c_${newId().replace(/-/g, '').slice(0, 20)}`
+    const apply = (category: BookCategory) => { customCategories.value = [...customCategories.value.filter(item => item.id !== category.id), category]; pendingCreates.delete(key) }
+    if (accountId.value) {
+      if (!original) pendingCreates.set(key, id)
+      return cloudWrite(token => apiRequest<BookCategory>(`/api/v1/books/${bookId}/categories${original ? `/${id}` : ''}`, { method: original ? 'PUT' : 'POST', token, data: original ? { name, version: original.version } : { id, type, name } }), apply)
+    }
+    const current = customCategories.value.find(item => item.id === id)
+    if (original && (!current || current.isDeleted || current.version !== original.version)) { toast('分类已变化，请刷新后重试'); return false }
+    apply({ id, bookId, type, name, icon: original?.icon || 'tag', color: original?.color || '#e1eee7', version: (original?.version || 0) + 1, isDeleted: false })
+    persist(); return true
+  }
+
+  async function deleteCategory(category: BookCategory): Promise<boolean> {
+    if (!canWriteBook(books.value.find(book => book.id === category.bookId))) { toast('你已无权管理这个账本的分类'); return false }
+    const current = customCategories.value.find(item => item.id === category.id && item.bookId === category.bookId)
+    if (!current) { toast('公共分类固定，不能删除'); return false }
+    const apply = (saved: BookCategory) => { customCategories.value = customCategories.value.map(item => item.id === saved.id ? saved : item) }
+    if (accountId.value) return cloudWrite(token => apiRequest<BookCategory>(`/api/v1/books/${category.bookId}/categories/${category.id}?version=${category.version}`, { method: 'DELETE', token }), apply)
+    if (current.version !== category.version) { toast('分类已变化，请刷新后重试'); return false }
+    if (!current.isDeleted) apply({ ...current, isDeleted: true, version: current.version + 1 })
+    persist(); return true
+  }
+
+  return { customCategories, categoriesFor, saveCategory, deleteCategory, entries, books, invitations, accountId, activeBookId, selectedMonth, storageAvailable, syncing, writing, cloudReady, syncError, legacyEntries, activeBook, bookEntries, monthEntries, expense, income, balance, hydrate, switchAccount, refreshCloud, readEntryReference, recognizeDrafts, recordDrafts, chatRequest, streamChat, streamChatV2, preferenceKey, saveEntry, deleteEntry, selectBook, addBook, updateBudget, openFamilyExample, createInvitation, revokeInvitation, removeMember, acceptInvitation, leaveBook, transferBook, bookActivities, resetDemo, categoryOf }
 })

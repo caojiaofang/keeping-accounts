@@ -30,6 +30,7 @@ from app.schemas.chat_v2 import (
 )
 from app.services.analysis import CATEGORIES
 from app.services.analysis_v2 import FilterQueriesV2, validate_date_range
+from app.services.categories import CategoryService
 from app.services.chat_v2_context import (
     ContextDraft,
     ContextState,
@@ -219,6 +220,9 @@ class ContextStoreV2:
             return {
                 "currentUserId": str(self.ledger.user_id) if self_creator else None,
                 "bookKind": book.kind,
+                "categoryDirectory": list(
+                    (await CategoryService(self.ledger).catalog(book.id)).values()
+                ),
                 "creatorDirectory": [
                     {"userId": str(member.user_id), "name": member.name, "status": member.status}
                     for member in members[:50]

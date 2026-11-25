@@ -3,10 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import TopBar from '@/components/TopBar.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import CategoryManager from '@/components/CategoryManager.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useBudgetStore } from '@/store/budget'
 import type { BudgetItemExecution } from '@/common/types/budget'
-import { categories } from '@/common/data/categories'
 import { localDate, toast } from '@/common/utils/format'
 import { isCalendarDate } from '@/common/services/expense-calendar'
 import { canEditEntry, entryAuthor } from '@/common/services/shared-books'
@@ -22,6 +22,7 @@ const editingId = ref('')
 const editingVersion = ref<number>()
 const type = ref<EntryType>('expense')
 const categoryId = ref('food')
+const categoriesOpen = ref(false)
 const amount = ref('0')
 const note = ref('')
 const date = ref(localDate())
@@ -59,7 +60,8 @@ watch(() => [bookId.value, date.value.slice(0, 7), type.value], () => { if (init
 watch(() => store.accountId, () => { budgetGeneration++; budgetLoading.value = false; budgetError.value = '账号已变化，请返回明细后重新打开记账' }, { flush: 'sync' })
 const originalEntry = computed(() => store.entries.find(entry => entry.id === editingId.value))
 const recordedBy = computed(() => originalEntry.value ? entryAuthor(store.books.find(book => book.id === originalEntry.value!.bookId), originalEntry.value) : '我')
-const visibleCategories = computed(() => categories.filter(category => category.type === type.value))
+const visibleCategories = computed(() => store.categoriesFor(bookId.value, type.value, originalEntry.value?.bookId === bookId.value && originalEntry.value.type === type.value ? originalEntry.value.categoryId : undefined))
+watch(bookId, () => { if (initialized.value && !visibleCategories.value.some(category => category.id === categoryId.value)) categoryId.value = visibleCategories.value[0].id })
 const activeBook = computed(() => store.books.find(book => book.id === bookId.value) || store.activeBook)
 const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete']
 
@@ -99,7 +101,7 @@ onLoad(async (options) => {
 function changeType(value: EntryType) {
   if (type.value === value) return
   type.value = value
-  categoryId.value = categories.find(category => category.type === value)!.id
+  categoryId.value = store.categoriesFor(bookId.value, value)[0].id
 }
 function press(key: string) {
   if (key === 'delete') { amount.value = amount.value.length > 1 ? amount.value.slice(0, -1) : '0'; return }
@@ -147,7 +149,8 @@ function remove() {
         <button v-if="!editingId" class="quick-record-link" @tap="openQuickRecord"><AppIcon name="edit" :size="28" /><text>试试一句话记账</text><AppIcon name="chevron" :size="22" /></button>
         <view class="entry-type"><button :class="{ active: type === 'expense' }" @tap="changeType('expense')">支出</button><button :class="{ active: type === 'income' }" @tap="changeType('income')">收入</button></view>
         <view class="amount-area"><text class="amount-caption">{{ type === 'expense' ? '支出金额' : '收入金额' }}</text><view class="amount-value number"><text class="amount-symbol">¥</text><text>{{ amount }}</text><view class="amount-caret" /></view></view>
-        <view class="category-grid"><button v-for="category in visibleCategories" :key="category.id" class="category-choice" :class="{ chosen: categoryId === category.id }" @tap="categoryId = category.id"><view class="choice-icon" :style="{ background: categoryId === category.id ? '#dcecdf' : '#f0f3ef' }"><AppIcon :name="category.icon" :size="39" /><view v-if="categoryId === category.id" class="choice-check"><AppIcon name="check" :size="17" light /></view></view><text>{{ category.name }}</text></button></view>
+        <view class="between"><text class="small muted">选择分类</text><button class="small" @tap="categoriesOpen = true">管理分类</button></view>
+        <view class="category-grid"><button v-for="category in visibleCategories" :key="category.id" class="category-choice" :class="{ chosen: categoryId === category.id }" @tap="categoryId = category.id"><view class="choice-icon" :style="{ background: categoryId === category.id ? '#dcecdf' : '#f0f3ef' }"><AppIcon :name="category.icon" :size="39" /><view v-if="categoryId === category.id" class="choice-check"><AppIcon name="check" :size="17" light /></view></view><text>{{ category.name }}{{ 'isDeleted' in category && category.isDeleted ? '（已删除）' : '' }}</text></button></view>
         <view class="record-form">
           <view class="form-row"><AppIcon name="note" :size="33" /><text class="form-label">备注</text><input v-model="note" class="note-input" placeholder="写点什么，留住这一刻" :maxlength="80" /></view>
           <picker mode="date" :value="date" start="2000-01-01" end="2100-12-31" @change="changeDate"><view class="form-row"><AppIcon name="calendar" :size="33" /><text class="form-label">日期</text><text class="form-value">{{ date === localDate() ? '今天' : date }}</text><AppIcon name="chevron" :size="23" /></view></picker>
@@ -163,6 +166,7 @@ function remove() {
     </scroll-view>
     <view class="keypad-area"><view class="keypad-left"><button v-for="key in keys" :key="key" :aria-label="key === 'delete' ? '退格' : key" class="key number" @tap="press(key)" @longpress="key === 'delete' ? amount = '0' : undefined"><AppIcon v-if="key === 'delete'" name="back" :size="39" /><text v-else>{{ key }}</text></button></view><view class="keypad-right"><button class="today-key" @tap="date = localDate()"><AppIcon name="calendar" :size="34" /><text>今天</text></button><button class="save-key" :disabled="saving" @tap="save"><AppIcon name="check" :size="44" light /><text>{{ editingId ? '保存修改' : '记好了' }}</text></button></view></view>
   </view>
+    <CategoryManager :open="categoriesOpen" :book-id="bookId" @close="categoriesOpen = false" />
 </template>
 
 <style scoped lang="scss">

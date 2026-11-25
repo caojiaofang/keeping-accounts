@@ -9,7 +9,7 @@ import PromptSheet from '@/components/PromptSheet.vue'
 import FamilyBudgetCard from '@/components/FamilyBudgetCard.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useAuthStore } from '@/store/auth'
-import { categories } from '@/common/data/categories'
+import CategoryManager from '@/components/CategoryManager.vue'
 import { toast } from '@/common/utils/format'
 import { entryAuthor } from '@/common/services/shared-books'
 import { appShare } from '@/common/services/share'
@@ -34,11 +34,9 @@ const nickname = computed(() => {
 const nicknameOpen = ref(false)
 watch(() => auth.user?.id, () => { nicknameOpen.value = false })
 const categoriesOpen = ref(false)
-const categoryType = ref<'expense' | 'income'>('expense')
-const visibleCategories = computed(() => categories.filter(category => category.type === categoryType.value))
 const recordedDays = computed(() => new Set(store.entries.map(entry => entry.date)).size)
 const menuGroups = [
-  [{ key: 'family-budget', title: '月度预算', icon: 'home', description: '每月额度、剩余与超支' }, { key: 'categories', title: '收支分类', icon: 'tag', description: '生活里的各种小事' }, { key: 'export', title: '导出账单', icon: 'export', description: '复制当前账本的 CSV 数据' }],
+  [{ key: 'family-budget', title: '月度预算', icon: 'home', description: '每月额度、剩余与超支' }, { key: 'categories', title: '收支分类', icon: 'tag', description: '公共分类与账本专属分类' }, { key: 'export', title: '导出账单', icon: 'export', description: '复制当前账本的 CSV 数据' }],
   [{ key: 'help', title: '使用帮助', icon: 'help', description: '' }, { key: 'privacy', title: '数据与隐私', icon: 'shield', description: '' }, { key: 'about', title: '关于墨记', icon: 'info', description: 'v0.1.0' }],
 ]
 async function saveNickname(value: string) {
@@ -110,7 +108,7 @@ function logout() {
     <view class="brand-footer"><text class="footer-brand">墨记</text><text>把日子，一笔一笔记好。</text></view>
     <BottomNav active="profile" />
     <PromptSheet :open="nicknameOpen" title="怎么称呼你" description="保存后会同步到账号，下次登录继续使用" placeholder="输入昵称" :initial="nickname" :maxlength="12" :loading="auth.savingNickname" @close="nicknameOpen = false" @confirm="saveNickname" />
-    <view v-if="categoriesOpen" class="sheet-mask" @tap="categoriesOpen = false"><view class="sheet" @tap.stop><view class="sheet-handle" /><view class="between"><text class="sheet-title">收支分类</text><button class="icon-button" aria-label="关闭分类" @tap="categoriesOpen = false"><AppIcon name="close" :size="34" /></button></view><view class="category-toggle"><button :class="{ active: categoryType === 'expense' }" @tap="categoryType = 'expense'">支出分类</button><button :class="{ active: categoryType === 'income' }" @tap="categoryType = 'income'">收入分类</button></view><scroll-view scroll-y style="max-height: 50vh;"><view class="category-list"><view v-for="category in visibleCategories" :key="category.id" class="category-item"><view :style="{ background: category.color }"><AppIcon :name="category.icon" :size="39" /></view><text>{{ category.name }}</text></view></view></scroll-view><view class="footnote">让生活的小事，各有所属</view></view></view>
+    <CategoryManager :open="categoriesOpen" :book-id="store.activeBookId" @close="categoriesOpen = false" />
   </view>
 </template>
 
@@ -151,10 +149,4 @@ function logout() {
 button.logout-button { width: 100%; padding: 23rpx 0; margin-top: 22rpx; border: 1rpx solid #dce7df; border-radius: 20rpx; font-size: 25rpx; color: #65816d; }
 .brand-footer { display: flex; flex-direction: column; align-items: center; margin-top: 34rpx; color: #a8b3a9; font-size: 20rpx; gap: 6rpx; }
 .footer-brand { letter-spacing: 6rpx; font-size: 28rpx; color: #91a294; padding-left: 6rpx; }
-.category-toggle { display: flex; gap: 30rpx; margin: 15rpx 0 27rpx; }
-.category-toggle button { color: #98a59b; font-size: 26rpx; padding: 10rpx 0; }
-.category-toggle button.active { color: #386446; border-bottom: 4rpx solid #6b9874; }
-.category-list { display: flex; flex-wrap: wrap; row-gap: 28rpx; }
-.category-item { width: 25%; display: flex; flex-direction: column; align-items: center; font-size: 22rpx; gap: 10rpx; }
-.category-item > view { width: 77rpx; height: 77rpx; border-radius: 24rpx; display: flex; align-items: center; justify-content: center; }
 </style>

@@ -53,7 +53,7 @@ function openChat() { uni.navigateTo({ url: `/pages/assistant/index?mode=chat&mo
   <view class="page">
     <TopBar title="收支统计" subtitle="让每一笔收支，变得更清晰。" />
     <CloudStatus />
-    <view class="between month-context"><view class="month-controls"><button aria-label="上个月" @tap="stepMonth(-1)"><AppIcon name="back" :size="26" /></button><MonthPicker v-model="store.selectedMonth" /><button aria-label="下个月" @tap="stepMonth(1)"><AppIcon name="chevron" :size="26" /></button></view><BookSwitcher /></view>
+    <view class="between month-context"><view class="month-controls"><button aria-label="上个月" @tap="stepMonth(-1)"><AppIcon name="back" :size="26" /></button><MonthPicker v-model="store.selectedMonth" hide-arrow /><button aria-label="下个月" @tap="stepMonth(1)"><AppIcon name="chevron" :size="26" /></button></view><BookSwitcher /></view>
     <view class="type-switch"><button :class="{ active: type === 'expense' }" @tap="type = 'expense'">支出分析</button><button :class="{ active: type === 'income' }" @tap="type = 'income'">收入分析</button></view>
 
     <view class="analysis-panel panel">

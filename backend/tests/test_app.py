@@ -20,11 +20,13 @@ def test_app_starts_without_external_services():
         database_url=None,
         redis_url=None,
         cors_origins=[],
+        chat_v2_enabled=True,
     )
     app = create_app(settings)
     with TestClient(app) as client:
         assert client.get("/api/v1/health").json() == {"status": "ok"}
         assert client.get("/docs").status_code == 200
+        assert client.get("/api/v1/assistant/v2/savings/workspace").status_code == 404
         schema = client.get("/openapi.json").json()
         assert set(schema["paths"]) == {
             "/api/v1/health",
@@ -34,6 +36,8 @@ def test_app_starts_without_external_services():
             "/api/v1/ledger",
             "/api/v1/books",
             "/api/v1/books/{book_id}/budget",
+            "/api/v1/books/{book_id}/categories",
+            "/api/v1/books/{book_id}/categories/{category_id}",
             "/api/v1/books/{book_id}/budgets/plan",
             "/api/v1/books/{book_id}/budgets/plan/preview",
             "/api/v1/books/{book_id}/budgets/months/{month}",

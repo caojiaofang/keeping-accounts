@@ -8,12 +8,15 @@ import { moduleUrl, root } from './test-modules.mjs'
 const source = await readFile(path.join(root, 'common/config.ts'), 'utf8')
 const productionUrl = 'https://mjzs.zf-yun.cn'
 const localUrl = 'http://127.0.0.1:8000'
+const configuredDevelopmentUrl = source.match(/const DEV_BASE_URL = ['"]([^'"]+)['"]/)?.[1]
+assert.ok(configuredDevelopmentUrl, '需要在配置中声明开发服务地址')
 let passed = 0
 async function check(name, action) { await action(); passed++; console.log(`通过：${name}`) }
 
-function config({ production = false, wechat = true, account = () => ({ miniProgram: { envVersion: 'develop' } }) } = {}) {
+function config({ production = false, wechat = true, developmentUrl = configuredDevelopmentUrl, account = () => ({ miniProgram: { envVersion: 'develop' } }) } = {}) {
   // 按目标平台移除条件编译块，并使用真实模块验证不同编译模式与微信环境的地址选择。
   const platformSource = source.replace(/\/\/ #ifdef MP-WEIXIN([\s\S]*?)\/\/ #endif/g, (_, content) => wechat ? content : '')
+    .replace(/const DEV_BASE_URL = ['"][^'"]+['"]/, `const DEV_BASE_URL = ${JSON.stringify(developmentUrl)}`)
     .replace('import.meta.env?.PROD', String(production))
   const compiled = ts.transpileModule(platformSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
   const context = { exports: {}, uni: { getAccountInfoSync: account } }
@@ -35,13 +38,16 @@ await check('微信环境信息缺失或读取失败时不会退回 localhost', 
   }
 })
 
-await check('仅明确的开发构建使用本地服务，体验与正式环境使用正式地址', () => {
-  assert.equal(config().apiBaseUrl, localUrl)
-  for (const envVersion of ['trial', 'release', 'future']) {
-    assert.equal(config({ account: () => ({ miniProgram: { envVersion } }) }).apiBaseUrl, productionUrl)
+await check('明确开发构建使用配置的开发地址，体验与正式环境始终使用正式地址', () => {
+  // 开发地址允许为 localhost、真机可访问的局域网地址或正式地址，不改写用户配置。
+  for (const developmentUrl of [configuredDevelopmentUrl, localUrl, 'http://192.168.1.8:8000/']) {
+    assert.equal(config({ developmentUrl }).apiBaseUrl, developmentUrl.replace(/\/+$/, ''))
+    for (const envVersion of ['trial', 'release', 'future']) {
+      assert.equal(config({ developmentUrl, account: () => ({ miniProgram: { envVersion } }) }).apiBaseUrl, productionUrl)
+    }
+    assert.equal(config({ developmentUrl, wechat: false }).apiBaseUrl, developmentUrl.replace(/\/+$/, ''))
+    assert.equal(config({ developmentUrl, wechat: false, production: true }).apiBaseUrl, productionUrl)
   }
-  assert.equal(config({ wechat: false }).apiBaseUrl, localUrl)
-  assert.equal(config({ wechat: false, production: true }).apiBaseUrl, productionUrl)
 })
 
 const { apiRequest, ApiError } = await import(await moduleUrl(path.join(root, 'common/api/request.ts')))

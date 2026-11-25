@@ -13,7 +13,7 @@ from sqlalchemy.schema import CreateTable
 
 from app.core.config import Settings
 from app.core.errors import ServiceError
-from app.models.ledger import Book, LedgerEntry
+from app.models.ledger import Book, BookCategory, LedgerEntry
 from app.models.shared import BookMember
 from app.models.user import User
 from app.schemas.chat_v2 import CompareArgs, DateRange, EntryFilter
@@ -45,7 +45,7 @@ def data():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     # 仅创建查询需要的四张表，不将 PostgreSQL 的部分索引错误转换成 SQLite 全局唯一索引。
     with engine.begin() as connection:
-        for model in (User, Book, BookMember, LedgerEntry):
+        for model in (User, Book, BookMember, LedgerEntry, BookCategory):
             connection.execute(CreateTable(model.__table__))
     with Session(engine, expire_on_commit=False) as session:
         users = {key: uuid4() for key in ("owner", "member", "former", "outsider")}

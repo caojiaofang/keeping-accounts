@@ -8,6 +8,12 @@ export interface Category {
   type: EntryType
 }
 
+export interface BookCategory extends Category {
+  bookId: string
+  version: number
+  isDeleted: boolean
+}
+
 export interface Book {
   ownerId?: string
   currentUserId?: string

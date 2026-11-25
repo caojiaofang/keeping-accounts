@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Book } from '@/common/types'
+import type { Book, Category } from '@/common/types'
 import type { FactRefV2, ResultCardV2 } from '@/common/types/chat-v2'
 import { filterDescriptions, statisticTime } from '@/common/services/chat-card'
 import SummaryCard from './SummaryCard.vue'
 import EntriesCard from './EntriesCard.vue'
 import TrendCard from './TrendCard.vue'
 import ComparisonCard from './ComparisonCard.vue'
-const props = defineProps<{ card: ResultCardV2; facts: FactRefV2[]; book?: Book; interactive: boolean; partial?: boolean }>()
+const props = defineProps<{ card: ResultCardV2; facts: FactRefV2[]; book?: Book; interactive: boolean; partial?: boolean; customCategories?: Category[] }>()
 defineEmits<{ open: [entryId: string] }>()
-const filters = computed(() => filterDescriptions(props.card.filters, props.book))
+const filters = computed(() => filterDescriptions(props.card.filters, props.book, props.customCategories || []))
 </script>
 <template>
   <view class="result-card">
@@ -17,7 +17,7 @@ const filters = computed(() => filterDescriptions(props.card.filters, props.book
     <text v-if="card.previousRange" class="scope previous">上期 {{ card.previousRange.start }} 至 {{ card.previousRange.end }}</text>
     <text class="title">{{ card.title }}</text><text v-if="partial" class="partial">部分结果 · 请结合回答中的未完成说明查看</text>
     <SummaryCard v-if="card.type === 'summary'" :card="card" :facts="facts" />
-    <EntriesCard v-else-if="card.type === 'entries'" :card="card" :facts="facts" :book="book" :interactive="interactive" @open="$emit('open', $event)" />
+    <EntriesCard v-else-if="card.type === 'entries'" :card="card" :facts="facts" :book="book" :interactive="interactive" :custom-categories="customCategories" @open="$emit('open', $event)" />
     <TrendCard v-else-if="card.type === 'trend'" :card="card" :facts="facts" />
     <ComparisonCard v-else :card="card" :facts="facts" />
     <view class="criteria"><text class="criteria-title">本卡筛选条件</text><text v-for="(filter, index) in filters" :key="index" class="criterion">{{ filter }}</text></view>

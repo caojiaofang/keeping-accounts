@@ -37,8 +37,22 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def include_name(name, kind, _parent_names):
+    # 0011 已应用到正式库，保留历史数据表，避免自动生成删表迁移。
+    return kind != "table" or name not in {
+        "savings_workspaces",
+        "savings_plans",
+        "savings_mutations",
+    }
+
+
 def do_run_migrations(connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        include_name=include_name,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

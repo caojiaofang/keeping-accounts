@@ -62,7 +62,7 @@ function openSharedBook() { uni.navigateTo({ url: `/pages/shared-book/index?id=$
       <view class="summary-heading"><text>本月支出</text><view class="summary-tag"><view class="badge-dot" />好好生活，慢慢记录</view></view>
       <view class="expense-total number"><text class="currency">¥</text>{{ money(store.expense) }}</view>
       <view class="summary-bottom">
-        <view class="summary-metric"><view class="metric-label"><text>本月收入</text><AppIcon name="down" :size="20" /></view><text class="metric-number number">{{ money(store.income) }}</text></view>
+        <view class="summary-metric"><view class="metric-label"><text>本月收入</text></view><text class="metric-number number">{{ money(store.income) }}</text></view>
         <view class="metric-divider" />
         <view class="summary-metric"><text class="metric-label">本月结余</text><text class="metric-number number">{{ store.balance < 0 ? '−' : '' }}{{ money(store.balance) }}</text></view>
         <button class="summary-link" aria-label="查看收支统计" @tap="viewStats"><AppIcon name="arrow" :size="32" /></button>

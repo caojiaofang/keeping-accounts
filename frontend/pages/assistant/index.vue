@@ -15,11 +15,12 @@ onShareAppMessage(appShare)
 const store = useLedgerStore()
 store.hydrate()
 const mode = ref('record')
+const pageActive = ref(true)
 const month = ref(localDate().slice(0, 7))
 const chat = useChatStore()
-onHide(() => chat.suspend())
+onHide(() => { pageActive.value = false; chat.suspend() })
 onUnload(() => chat.suspend())
-onShow(() => { if (mode.value === 'chat' && store.cloudReady && !chat.ready && !chat.busy) void chat.load(month.value) })
+onShow(() => { pageActive.value = true })
 onLoad(options => {
   mode.value = options?.mode === 'chat' ? 'chat' : 'record'
   if (options?.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(options.month)) month.value = options.month
@@ -34,7 +35,7 @@ onLoad(options => {
       <view class="assistant-context"><view class="book-context"><AppIcon name="book" :size="24" /><text>{{ store.activeBook.name }}</text></view><text class="demo-label">{{ store.accountId ? (mode === 'record' ? '智能识别 · 确认后保存' : '云端账单 · 智能分析') : '示例演示' }}</text></view>
     </view>
     <view class="assistant-content" :style="{ display: mode === 'record' ? 'flex' : 'none' }"><QuickRecord /></view>
-    <view class="assistant-content" :style="{ display: mode === 'chat' ? 'flex' : 'none' }"><ExpenseChat :month="month" :active="mode === 'chat'" /></view>
+    <view class="assistant-content" :style="{ display: mode === 'chat' ? 'flex' : 'none' }"><ExpenseChat :month="month" :active="mode === 'chat' && pageActive" /></view>
   </view>
 </template>
 

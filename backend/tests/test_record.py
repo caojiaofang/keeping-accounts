@@ -59,7 +59,7 @@ def service_for(result):
     ledger = SimpleNamespace(
         user_id=uuid4(),
         require_book=AsyncMock(),
-        session=SimpleNamespace(rollback=AsyncMock()),
+        session=SimpleNamespace(rollback=AsyncMock(), scalars=AsyncMock(return_value=[])),
         create_entry=AsyncMock(),
     )
     llm = SimpleNamespace(structured=AsyncMock(return_value=result))
@@ -308,3 +308,146 @@ def test_record_api_contract_and_validation_do_not_echo_image():
         )
         assert invalid.status_code == 422
         assert "private-image-data" not in invalid.text
+
+
+@pytest.mark.parametrize("notice_mode", ["notices", "clarification", "incomplete-draft"])
+def test_partial_image_returns_three_complete_transactions(notice_mode):
+    async def run():
+        complete = [
+            parsed_draft(amount=amount, date=day, time=time)
+            for amount, day, time in (
+                (1100, "2026-11-16", "11:42"),
+                (1290, "2026-11-14", "18:05"),
+                (1529, "2026-11-13", "11:39"),
+            )
+        ]
+        output = {"drafts": complete, "clarification": None}
+        if notice_mode == "notices":
+            output["notices"] = [
+                "已跳过底部未显示金额的交易。",
+                "仅显示时间的记录按今天处理，请核对日期。",
+            ]
+        elif notice_mode == "clarification":
+            output["clarification"] = "底部交易缺少金额，已跳过。"
+        else:
+            output["drafts"].append(parsed_draft(amount=None, date=None))
+        service = service_for(output)
+        response = await service.record(RecordRequest(book_id=uuid4(), image=image_url()))
+        assert [draft.amount for draft in response.drafts] == [1100, 1290, 1529]
+        assert [draft.time for draft in response.drafts] == ["11:42", "18:05", "11:39"]
+        assert response.clarification is None
+        assert "3 笔" in response.reply and "跳过" in response.reply
+        assert len({draft.key for draft in response.drafts}) == 3
+        schema = service.llm.structured.call_args.args[2]
+        assert set(schema["required"]) == set(schema["properties"])
+        service.ledger.create_entry.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"amount": None},
+        {"amount": -10},
+        {"date": None},
+        {"date": "2026-02-30"},
+        {"category_id": "salary"},
+        {"category_id": "unknown"},
+    ],
+)
+def test_incomplete_image_transaction_does_not_block_complete_ones(changes):
+    async def run():
+        service = service_for(
+            {"drafts": [parsed_draft(amount=1100), parsed_draft(**changes)], "clarification": None}
+        )
+        response = await service.record(RecordRequest(book_id=uuid4(), image=image_url()))
+        assert [draft.amount for draft in response.drafts] == [1100]
+        assert response.clarification is None and "1 笔图片记录" in response.reply
+        service.ledger.create_entry.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_image_with_no_complete_transactions_requests_more_information():
+    async def run():
+        for drafts in ([], [parsed_draft(amount=None)]):
+            service = service_for({"drafts": drafts, "clarification": None})
+            response = await service.record(RecordRequest(book_id=uuid4(), image=image_url()))
+            assert not response.drafts and response.clarification
+            service.ledger.create_entry.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_partial_image_preserves_untouched_pending_drafts_and_validates_old_keys():
+    async def run():
+        book_id = uuid4()
+        old = draft_context(book_id)
+        service = service_for(
+            {
+                "drafts": [parsed_draft(amount=1100), parsed_draft(amount=None)],
+                "clarification": None,
+            }
+        )
+        response = await service.record(
+            RecordRequest(book_id=book_id, drafts=[old], image=image_url())
+        )
+        assert len(response.drafts) == 2
+        retained = next(
+            draft
+            for draft in response.drafts
+            if draft.key == old["key"] or str(draft.key) == old["key"]
+        )
+        assert retained.amount == old["amount"]
+        service.llm.structured.return_value = {
+            "drafts": [parsed_draft(key=old["key"], amount=-10), parsed_draft(amount=1100)],
+            "clarification": None,
+        }
+        with pytest.raises(ServiceError):
+            await service.record(RecordRequest(book_id=book_id, drafts=[old], image=image_url()))
+        service.llm.structured.return_value = {
+            "drafts": [parsed_draft(key=str(uuid4()))],
+            "clarification": None,
+        }
+        with pytest.raises(ServiceError):
+            await service.record(RecordRequest(book_id=book_id, image=image_url()))
+
+    asyncio.run(run())
+
+
+def test_partial_image_and_existing_drafts_cannot_exceed_batch_limit():
+    async def run():
+        book_id = uuid4()
+        old = [draft_context(book_id) for _ in range(10)]
+        service = service_for(
+            {
+                "drafts": [parsed_draft(amount=1100)],
+                "clarification": None,
+                "notices": ["已跳过一笔残缺记录。"],
+            }
+        )
+        response = await service.record(
+            RecordRequest(book_id=book_id, drafts=old, image=image_url())
+        )
+        assert not response.drafts and "超过10笔" in response.clarification
+
+    asyncio.run(run())
+
+
+def test_partial_image_reply_fits_next_turn_history():
+    async def run():
+        service = service_for(
+            {
+                "drafts": [parsed_draft()],
+                "clarification": None,
+                "notices": [str(index) + "提示" * 49 for index in range(10)],
+            }
+        )
+        response = await service.record(RecordRequest(book_id=uuid4(), image=image_url()))
+        assert len(response.reply) <= 500
+        RecordRequest(
+            book_id=uuid4(), text="继续", history=[{"role": "assistant", "text": response.reply}]
+        )
+
+    asyncio.run(run())

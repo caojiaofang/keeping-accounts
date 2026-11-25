@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { Book } from '@/common/types'
+import type { Book, Category } from '@/common/types'
 import type { FactRefV2, ResultCardV2, ResultRowV2 } from '@/common/types/chat-v2'
 import { cardFacts } from '@/common/services/chat-card'
 import { categories } from '@/common/data/categories'
 import FactList from './FactList.vue'
-defineProps<{ card: ResultCardV2; facts: FactRefV2[]; book?: Book; interactive: boolean }>()
+defineProps<{ card: ResultCardV2; facts: FactRefV2[]; book?: Book; interactive: boolean; customCategories?: Category[] }>()
 defineEmits<{ open: [entryId: string] }>()
 function author(row: ResultRowV2, book?: Book): string {
   return book?.members?.find(member => member.userId === row.creatorId)?.name || '历史记账人'
@@ -17,7 +17,7 @@ function author(row: ResultRowV2, book?: Book): string {
     <view v-for="row in card.rows" :key="row.entryId!" class="entry">
       <text class="date">{{ row.date }} {{ row.time || '' }} · {{ row.entryType === 'income' ? '收入' : '支出' }}</text>
       <text class="title" selectable>{{ row.label }}</text><text v-if="row.detail && row.detail !== row.label" class="detail" selectable>{{ row.detail }}</text>
-      <text class="detail">{{ categories.find(category => category.id === row.categoryId)?.name || '历史分类' }} · {{ row.account }}<template v-if="book?.kind === 'shared'"> · {{ author(row, book) }}</template></text>
+      <text class="detail">{{ [...categories, ...(customCategories || [])].find(category => category.id === row.categoryId)?.name || '历史分类' }} · {{ row.account }}<template v-if="book?.kind === 'shared'"> · {{ author(row, book) }}</template></text>
       <text v-if="row.matchedKeywords?.length" class="match">备注匹配：{{ row.matchedKeywords.join('、') }}</text>
       <FactList :facts="cardFacts(row.factIds, facts)" />
       <button class="open-entry" :disabled="!interactive" @tap="$emit('open', row.entryId!)">{{ interactive ? '查看当前账单' : '回答保存后可查看账单' }}</button>

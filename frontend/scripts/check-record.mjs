@@ -83,6 +83,25 @@ await check('图片缺日期时保留图片用于补充，完成后不再重复�
   assert.equal(calls, 3)
 })
 
+await check('图片中的完整三笔草稿与跳过说明一起展示，残缺记录不阻断批量确认', async () => {
+  const { ledger, record } = fresh()
+  let writes = 0
+  ledger.saveEntry = async () => { writes++; return true }
+  ledger.recordDrafts = async () => ({ drafts: [draft('image-one', 1100), draft('image-two', 1290), draft('image-three', 1529)], clarification: null, reply: '已整理 3 笔待确认账单。底部记录未显示金额，已跳过；仅显示时间的记录按今天处理，请核对日期。' })
+  assert.equal(await record.send('', image), true)
+  assert.deepEqual(record.pending.map(item => item.amount), [1100, 1290, 1529])
+  assert.match(record.messages.at(-1).text, /已跳过/)
+  assert.equal(writes, 0)
+  assert.equal(await record.confirm(['image-one', 'image-two', 'image-three']), 3)
+  assert.equal(writes, 3)
+  ledger.recordDrafts = async input => {
+    assert.equal(input.image, undefined)
+    assert.deepEqual(input.drafts, [])
+    return result([draft('next')])
+  }
+  await record.send('再记一笔')
+})
+
 await check('追问不明确时保留原草稿，不能让空结果覆盖待确认内容', async () => {
   const { ledger, record } = fresh()
   await record.send('午饭35元')

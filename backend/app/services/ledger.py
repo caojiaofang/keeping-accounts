@@ -8,11 +8,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError
-from app.models.ledger import Book, LedgerEntry
+from app.models.ledger import Book, BookCategory, LedgerEntry
 from app.models.shared import BookActivity, BookMember
 from app.models.user import User
 from app.schemas.ledger import (
     BookResponse,
+    CategoryResponse,
     CreateBook,
     CreateEntry,
     EntryResponse,
@@ -20,6 +21,7 @@ from app.schemas.ledger import (
     MemberResponse,
     UpdateBudget,
     UpdateEntry,
+    is_custom_category,
 )
 
 
@@ -189,6 +191,14 @@ class LedgerService:
         return LedgerResponse(
             books=[await self.describe(book) for book in books],
             entries=[entry_response(entry) for entry in entries],
+            custom_categories=[
+                CategoryResponse.model_validate(row, from_attributes=True)
+                for row in await self.session.scalars(
+                    select(BookCategory)
+                    .where(BookCategory.book_id.in_([book.id for book in books]))
+                    .order_by(BookCategory.id)
+                )
+            ],
         )
 
     async def create_book(self, body: CreateBook) -> BookResponse:
@@ -248,6 +258,25 @@ class LedgerService:
 
     async def create_entry(self, body: CreateEntry) -> EntryResponse:
         book = await self.require_book(body.book_id, write=True)
+        from app.services.categories import CategoryService
+
+        # 重试原请求时允许保留已删除分类，但不能用它创建新账单。
+        replay = (
+            await self.session.get(LedgerEntry, body.id)
+            if is_custom_category(body.category_id)
+            else None
+        )
+        retained = (
+            replay.category_id
+            if replay
+            and replay.book_id == body.book_id
+            and replay.created_by == self.user_id
+            and replay.type == body.type
+            else None
+        )
+        await CategoryService(self).validate(
+            body.book_id, body.category_id, body.type, retained_id=retained
+        )
         inserted = await self.session.scalar(
             insert(LedgerEntry)
             .values(
@@ -328,6 +357,16 @@ class LedgerService:
             old_book.kind == "shared" or target.kind == "shared"
         ):
             raise ServiceError(422, "共同账单不能转移到其他账本")
+        from app.services.categories import CategoryService
+
+        retained = (
+            original.category_id
+            if original.book_id == body.book_id and original.type == body.type
+            else None
+        )
+        await CategoryService(self).validate(
+            body.book_id, body.category_id, body.type, retained_id=retained
+        )
         before = entry_response(original).model_dump(mode="json", by_alias=True)
         entry = await self.session.scalar(
             update(LedgerEntry)

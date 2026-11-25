@@ -29,6 +29,7 @@ from app.schemas.chat_v2 import (
 )
 from app.services.analysis import CATEGORIES
 from app.services.analysis_v2 import FilterQueriesV2
+from app.services.categories import CategoryService
 from app.services.chat_v2_cursor import CursorCodec
 from app.services.ledger import LedgerService
 
@@ -147,9 +148,9 @@ def grouped_statement(prepared, group_by):
     return statement.where(*prepared.conditions).group_by(LedgerEntry.type, group_key, group_name)
 
 
-def group_label(key, name, group_by):
+def group_label(key, name, group_by, catalog=None):
     if group_by == "category":
-        return CATEGORIES.get(key, ("未识别分类",))[0]
+        return (catalog or {}).get(key, {}).get("name") or CATEGORIES.get(key, ("未识别分类",))[0]
     if group_by == "creator":
         return name or "历史记账人"
     return key
@@ -159,6 +160,7 @@ class ChatToolsV2:
     def __init__(self, ledger: LedgerService, settings: Settings, *, today: date, clock=now_ms):
         self.ledger, self.clock, self.today = ledger, clock, today
         self.filters = FilterQueriesV2(ledger, settings, today=today)
+        self.catalog = {}
         self.cursor = CursorCodec(settings.chat_v2_cursor_secret)
 
     async def execute(self, call_id, book_id, name, arguments):
@@ -180,6 +182,7 @@ class ChatToolsV2:
                 call_id, name, "invalid_arguments", "查询参数不正确，请检查日期和筛选条件"
             )
         try:
+            self.catalog = await CategoryService(self.ledger).catalog(book_id)
             result = await getattr(self, name)(call_id, book_id, args)
             # 不能把查询期间的权限变化解释成零记录；返回前再次核验。
             await self.ledger.require_book(book_id)
@@ -259,7 +262,7 @@ class ChatToolsV2:
                     label = (
                         "其余分组"
                         if key is None
-                        else group_label(key, row["group_name"], args.group_by)
+                        else group_label(key, row["group_name"], args.group_by, self.catalog)
                     )
                     rows.append(
                         ResultRow(
@@ -412,14 +415,13 @@ class ChatToolsV2:
             fact_refs=bundle.facts,
         )
 
-    @staticmethod
-    def _entry_row(bundle, row, filters):
+    def _entry_row(self, bundle, row, filters):
         prefix = "e" + row["id"].hex
         amount_ref = bundle.add(
             prefix + ".amount", int(row["amount"]), "cents", "账单金额", "amount"
         )
         date_ref = bundle.add(prefix + ".date", row["date"].isoformat(), "date", "账单日期")
-        category = CATEGORIES.get(row["category_id"], ("未识别分类",))[0]
+        category = group_label(row["category_id"], "", "category", self.catalog)
         return ResultRow(
             label=row["note"] or category,
             entry_id=row["id"],
@@ -528,7 +530,7 @@ class ChatToolsV2:
                 label = (
                     "其余分组"
                     if key is None
-                    else group_label(key, row["group_name"], args.group_by)
+                    else group_label(key, row["group_name"], args.group_by, self.catalog)
                 )
                 detail, row_date = None, None
                 if args.group_by == "date":

@@ -95,7 +95,7 @@ def make_service(monkeypatch, explanation_failure=None):
         add=Mock(),
     )
     session.add.side_effect = lambda turn: setattr(turn, "created_at", datetime.now(UTC))
-    ledger = SimpleNamespace(user_id=uuid4(), session=session)
+    ledger = SimpleNamespace(user_id=uuid4(), session=session, require_book=AsyncMock())
     redis = SimpleNamespace(set=AsyncMock(return_value=True), eval=AsyncMock(return_value=1))
     waiting, release, closed = asyncio.Event(), asyncio.Event(), asyncio.Event()
 

@@ -117,7 +117,7 @@ async function readActivities(earlier = false) {
 }
 function actor(item: BookActivity) { return book.value?.members?.find(member => member.userId === item.actorId)?.name || '历史成员' }
 function actionLabel(action: string) {
-  return ({ create_book: '创建了账本', invite: '生成了邀请', revoke_invite: '撤销了邀请', join: '加入了账本', remove_member: '移出了成员', leave: '退出了账本', transfer: '转让了账本', close: '解散了账本', budget: '调整了共同预算', create_entry: '记了一笔', update_entry: '修改了账单', delete_entry: '删除了账单' } as Record<string, string>)[action] || '更新了账本'
+  return ({ create_book: '创建了账本', invite: '生成了邀请', revoke_invite: '撤销了邀请', join: '加入了账本', remove_member: '移出了成员', leave: '退出了账本', transfer: '转让了账本', close: '解散了账本', budget: '调整了共同预算', create_category: '新增了分类', update_category: '修改了分类', delete_category: '删除了分类', create_entry: '记了一笔', update_entry: '修改了账单', delete_entry: '删除了账单' } as Record<string, string>)[action] || '更新了账本'
 }
 function changes(item: BookActivity): string {
   if (item.action === 'budget') return `预算 ${money(Number(item.payload.before))} → ${money(Number(item.payload.after))} 元`

@@ -1,5 +1,6 @@
 """与小程序一致的账本契约；不接受客户端指定用户身份。"""
 
+import re
 from datetime import date as Date
 from typing import Literal
 from uuid import UUID
@@ -23,6 +24,10 @@ EXPENSE_CATEGORIES = {
 }
 INCOME_CATEGORIES = {"salary", "bonus", "parttime", "refund", "other-income"}
 MAX_CENTS = 999999999
+
+
+def is_custom_category(value: str) -> bool:
+    return bool(re.fullmatch(r"c_[0-9a-f]{20}", value))
 
 
 class LedgerSchema(BaseModel):
@@ -71,7 +76,7 @@ class BookResponse(LedgerSchema):
 class EntryInput(LedgerSchema):
     book_id: UUID
     type: Literal["expense", "income"]
-    category_id: str
+    category_id: str = Field(min_length=1, max_length=24)
     amount: int = Field(strict=True, gt=0, le=MAX_CENTS)
     date: Date = Field(ge=Date(2000, 1, 1), le=Date(2100, 12, 31))
     time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -86,7 +91,7 @@ class EntryInput(LedgerSchema):
     @model_validator(mode="after")
     def valid_category(self):
         allowed = EXPENSE_CATEGORIES if self.type == "expense" else INCOME_CATEGORIES
-        if self.category_id not in allowed:
+        if self.category_id not in allowed and not is_custom_category(self.category_id):
             raise ValueError("分类与收支类型不匹配")
         return self
 
@@ -114,6 +119,39 @@ class EntryResponse(EntryInput):
     budget_notice: str | None = None
 
 
+class CreateCategory(LedgerSchema):
+    id: str = Field(pattern=r"^c_[0-9a-f]{20}$")
+    type: Literal["expense", "income"]
+    name: str = Field(min_length=1, max_length=12)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class UpdateCategory(LedgerSchema):
+    name: str = Field(min_length=1, max_length=12)
+    version: int = Field(strict=True, ge=1)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class CategoryResponse(LedgerSchema):
+    id: str
+    book_id: UUID
+    type: Literal["expense", "income"]
+    name: str
+    icon: str
+    color: str
+    version: int
+    is_deleted: bool
+
+
 class LedgerResponse(LedgerSchema):
     books: list[BookResponse]
     entries: list[EntryResponse]
+    custom_categories: list[CategoryResponse] = Field(default_factory=list)

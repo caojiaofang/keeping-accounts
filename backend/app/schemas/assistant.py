@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -82,6 +82,10 @@ class ParsedRecordResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     drafts: list[ParsedRecordDraft] = Field(max_length=10)
     clarification: str | None = Field(max_length=300)
+    # 非阻断提示与追问分开，避免一笔残缺记录挡住其他完整草稿。
+    notices: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=10
+    )
 
 
 class RecordResponse(ParseResponse):

@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { useLedgerStore } from '@/store/ledger'
 import { useRecordStore } from '@/store/record'
-import { categories } from '@/common/data/categories'
 import { recordExamples } from '@/common/mock/assistant'
 import type { AssistantDraft } from '@/common/mock/assistant'
 import type { RecordImage } from '@/common/types/record'
@@ -22,7 +21,7 @@ const anchor = ref('')
 const editingKey = ref('')
 const form = ref<AssistantDraft & { amountText: string }>()
 const accounts = ['微信', '支付宝', '银行卡', '现金']
-const visibleCategories = computed(() => categories.filter(item => item.type === form.value?.type))
+const visibleCategories = computed(() => store.categoriesFor(form.value?.bookId || store.activeBookId, form.value?.type || 'expense'))
 const busy = computed(() => record.busy || choosing.value)
 const blocked = computed(() => record.blocked || choosing.value)
 let selectionRevision = 0
@@ -104,7 +103,7 @@ function editDraft(draft: AssistantDraft) {
 function changeType(event: { detail: { value: string | number } }) {
   if (!form.value) return
   form.value.type = Number(event.detail.value) === 0 ? 'expense' : 'income'
-  form.value.categoryId = categories.find(item => item.type === form.value!.type)!.id
+  form.value.categoryId = store.categoriesFor(form.value.bookId, form.value.type)[0].id
 }
 function changeCategory(event: { detail: { value: string | number } }) { if (form.value) form.value.categoryId = visibleCategories.value[Number(event.detail.value)].id }
 function changeAccount(event: { detail: { value: string | number } }) { if (form.value) { form.value.account = accounts[Number(event.detail.value)]; form.value.accountDefaulted = false } }
@@ -143,7 +142,7 @@ function login() { uni.navigateTo({ url: '/pages/login/index?redirect=%2Fpages%2
           <view class="welcome-mark"><AppIcon name="edit" :size="43" light /></view>
           <text class="welcome-title">聊两句，把账记好</text>
           <view class="welcome-copy"><text>说一笔收支，或发一张账单图片。</text><text>需要补充的信息，我会接着问你。</text></view>
-          <view class="receipt-example"><AppIcon name="image" :size="35" /><view><text>截图、小票，拍下就能记</text><text>识别后先核对，再确认保存</text></view></view>
+          <view class="receipt-example"><AppIcon name="image" :size="35" /><view><text>截图、小票，拍下就能记</text><text>先提取完整账单，核对后确认保存</text></view></view>
           <text class="examples-title">也可以从这一句开始</text>
           <button v-for="example in recordExamples" :key="example.label" class="example-row" :disabled="blocked" @tap="chooseExample(example.text)"><text>{{ example.text }}</text><AppIcon name="plus" :size="25" /></button>
           <text class="welcome-note">{{ store.accountId ? '只记录到当前账本；可以继续说“改成32元”或“是昨天的”。' : '当前为预置示例，微信登录后可自由聊天和识别图片。' }}</text>
