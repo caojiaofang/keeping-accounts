@@ -1,6 +1,6 @@
 # Web 管理端
 
-Web 正式页面已于 2026-11-06 北京时间 20:23 更新至 [`20261106T121956Z`](releases/20261106T121956Z.md)。两个服务 healthy，正式库为 `0007_nickname`，用户列表与详情已展示云端昵称。管理员密码、账号设置与登录日志保留，Web 构建开关仍为 `VITE_ADMIN_ACCOUNT_FEATURES=true`；小程序本次未上传。
+Web 管理端现部署在 z236，镜像版本为 [`20261106T121956Z`](releases/20261106T121956Z.md)。这个版本于 2026-11-06 北京时间 20:23 首次上线，支持在用户列表与详情展示云端昵称，并保留管理员密码、账号设置和登录日志。新版本正式构建仍使用 `VITE_ADMIN_ACCOUNT_FEATURES=true`。
 
 2026-11-06 北京时间 20:42 [仅后端更新至 `20261106T124007Z`](releases/20261106T124007Z.md)，提供家庭账本账号昵称，Web 镜像与容器保持原样。
 
@@ -52,50 +52,17 @@ https://mjzs.zf-yun.cn
 
 ## 发布
 
-当前生产已发布新管理员 API 与家庭预算 API，账号页面构建时显式设置 `VITE_ADMIN_ACCOUNT_FEATURES=true`，详见[构建开关](../../admin/README.md#账号功能开关)。本次迁移、备份、只读验收、故障恢复及回退命令见[发布记录](releases/20261106T115227Z.md)。`scripts/update-release.sh` 为本次从 `0004_shared` 升级的专用流程，依赖随版本保存的清单与验收脚本，不能直接作为后续版本的通用升级命令。下面保留首次部署流程供历史参考；新版本必须先备份并核对迁移链，再切换应用。
+本地构建 Web 静态文件，将 `admin/dist` 和后端源码打包上传到 `z236`，再在服务器上运行 `docker compose build`。打包时保留 `VITE_ADMIN_ACCOUNT_FEATURES=true`，已有的管理员账号继续通过正式数据库使用。具体命令见 [z236 正式部署](deployment.md#发布服务端和-web-管理端)。
 
-首次从原后端单服务升级为仓库根目录双服务 Compose。旧发布目录保持原样，新的目录结构为：
+切换 `current` 前验证以下路径和登录流程：
 
-```text
-/opt/keeping-accounts/releases/<新版本>/
-  ├─ docker-compose.yml
-  ├─ .env                       # IMAGE_TAG
-  ├─ backend/
-  │   ├─ .env.production -> /opt/keeping-accounts/shared/.env.production
-  │   └─ ...
-  └─ admin/                     # Dockerfile、deploy/nginx.conf、dist
-```
-
-本机先执行 `scripts/check.ps1 -Build` 和隔离 PostgreSQL 管理查询集成测试。当前版本需以 `VITE_ADMIN_ACCOUNT_FEATURES=true` 构建后使用 `-SkipBuild` 保留该产物：
-
-```powershell
-$env:VITE_ADMIN_ACCOUNT_FEATURES='true'
-npm.cmd --prefix admin run build
-Remove-Item Env:VITE_ADMIN_ACCOUNT_FEATURES
-.\scripts\package-release.ps1 -SkipBuild
-```
-
-打包脚本仅包含清单中的源码和静态产物，不包含真实环境文件、初始账号文件、虚拟环境或 node_modules。上传生成的包到新的发布目录，解压后将共享环境文件链接为 `backend/.env.production`，在新目录根部设置 `.env` 的 IMAGE_TAG。
-
-发布前备份当前版本链接、共享环境文件、公共 Nginx 配置及正式数据库。环境文件增加管理员配置；Argon2 摘要必须用单引号包裹，避免 Compose 插值。然后在新版本根目录运行：
-
-```bash
-docker compose config --quiet
-docker compose build
-docker compose up -d --wait --wait-timeout 90
-```
-
-首次静态管理端部署没有新迁移；当前版本须在切换前执行至 `0006_budget`，首次启用账号表再运行 `python admin_account.py bootstrap`。公共 Nginx 已配置，无改动时无需覆盖或重载；配置变化时备份、检查并重载，随后验证：
-
-1. `/`、`/login`、刷新 `/users` 都返回管理页面。
-2. 未登录 `/prod-api/auth/me` 返回 401；登录后概览、用户、账本接口返回真实数据。
+1. `/`、`/login` 和 `/users` 刷新后均返回管理页面。
+2. 未登录时 `/prod-api/auth/me` 返回 401。登录后核对概览、用户和账本页面。
 3. 登录后刷新可恢复会话，退出后旧会话返回 401。
-4. `/api/v1/health` 返回 `{"status":"ok"}`，原小程序接口继续可用。
-5. `/prod-api/unknown` 返回 API 404，不能降级为前端 HTML。
+4. `/api/v1/health` 返回 `{"status":"ok"}`，小程序继续访问 `/api/v1`。
+5. `/prod-api/unknown` 返回 API 404。
 
-全部通过后将 `/opt/keeping-accounts/current` 指向新目录。新版本运维命令从该目录根部运行，后端检查命令仍为 `docker compose exec -T backend ...`。
-
-若发布失败，在旧版本目录运行其 `docker compose up -d --no-build --wait`，恢复 current 链接；仅在配置确实变化时恢复配置。旧版本没有 admin 服务时可停止新 admin 容器，不删除数据库卷。当前 `0005_admin`、`0006_budget` 为增量表，回退旧应用时保留结构，不自动降级数据库；详见本次发布记录。
+首次部署和 `0004_shared` 至 `0006_budget` 的迁移见[历史发布记录](releases/20261106T115227Z.md)。
 
 ## 验证
 

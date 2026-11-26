@@ -1,43 +1,24 @@
-# z11 正式部署
+# z236 正式部署
 
-当前正式后端为 [`20261116T073206Z`](releases/20261116T073206Z.md)，2026-11-16 北京时间15:38完成家庭存钱助手后端发布与公网复核。正式库已迁移至 `0011_savings_assistant`，开发库本次未升级。Web 保持 `20261106T121956Z`，容器未重建；管理员密码、账号设置与登录日志均保留。新版小程序由用户自行发布，设备验收待补。
+正式服务端和 Web 管理端部署在 `z236`（`60.205.105.236`）。公网入口为 `https://mjzs.zf-yun.cn`，根路径提供管理页面，管理 API 使用 `/prod-api`，小程序 API 使用 `/api/v1`。
 
-当前 `current` 指向 `/opt/keeping-accounts/releases/20261116T073206Z`，**该版本目录**的 `.env` 固定 `IMAGE_TAG=20261116T073206Z`、`ADMIN_IMAGE_TAG=20261106T121956Z`；服务器根目录实际没有 `.env`。既有 V2 enabled／native、模型和45秒超时配置保留，正式环境与公共 Nginx 配置逐字节未变。沿用的 Web 构建包含 `VITE_ADMIN_ACCOUNT_FEATURES=true`，后续重新构建发布时需保留该开关。备份、验收与回退见[本次发布记录](releases/20261116T073206Z.md)，上一后端为[分类及图片部分识别 `20261116T054923Z`](releases/20261116T054923Z.md)。当前 `admin` 为原 Web 版本目录的链接，后端专用发布不会替换 Web 镜像。
-
-公网地址为 `https://mjzs.zf-yun.cn`，健康检查为 `/api/v1/health`，小程序接口前缀为 `/api/v1`。Web 管理端上线后根路径提供管理页面，管理接口前缀为 `/prod-api`，前后端分别运行于独立容器。双服务发布及新目录结构见 [Web 管理端部署](web-admin.md)，以下保留原后端单服务部署说明供旧版本运维与回退参考。
+当前 `current` 指向 `/opt/keeping-accounts/releases/20261116T073206Z`。后端镜像为 `moji-backend:20261116T073206Z`，Web 镜像为 `moji-admin:20261106T121956Z`，正式库已迁移至 `0011_savings_assistant`。迁移前的发布记录见[后端发布](releases/20261116T073206Z.md)和 [Web 发布](releases/20261106T121956Z.md)。
 
 ## 服务器目录与运行方式
 
-```text
-/opt/keeping-accounts/
-├── current -> releases/<版本>     # 当前上线版本
-├── releases/<版本>/              # 后端源码、Dockerfile、docker-compose.yml
-│   ├── .env                      # IMAGE_TAG，固定该版本的镜像标签
-│   └── .env.production -> /opt/keeping-accounts/shared/.env.production
-└── shared/
-    ├── .env.production           # 正式凭据，仅 root 可读
-    └── tls/                      # 证书、私钥的原始副本
+Compose 项目名为 `moji`。后端、Web、`postgres16`、`redis6` 和公共 Nginx `nginx-web` 接入同一个 Docker 网络 `moji_net`。公共 Nginx 通过 `moji-backend:8000` 和 `moji-admin:80` 转发请求，应用容器无需发布主机端口。
 
-/opt/nginx/conf.d/mjzs.zf-yun.cn.conf
-/opt/nginx/cert/mjzs.zf-yun.cn/fullchain.pem
-/opt/nginx/cert/mjzs.zf-yun.cn/privkey.pem
-```
+正式后端使用 PostgreSQL 数据库 `keeping_accounts_prod`、Redis 逻辑库 2 和 `moji:prod:` 前缀。`FORWARDED_ALLOW_IPS` 当前为 `172.30.236.2`，即公共 Nginx 在 `moji_net` 上的地址。Nginx 容器 IP 变化时需同步修改该值并重建后端容器。
 
-Compose 项目名为 `moji`，服务名为 `backend`，通过已有 `app_net` 网络连接 `postgres16:5432`、`redis6:6379` 和 `nginx-web`，不发布额外的主机端口。Nginx 的配置源文件为 `backend/deploy/nginx.conf`，通过 Docker DNS 定期解析 `moji-backend`，容器更新后不需要为地址变化重载 Nginx。
-
-正式环境使用数据库 `keeping_accounts_prod`、专用非超级用户 `keeping_accounts_prod_app`，Redis 使用逻辑库 **2** 与 `moji:prod:` 前缀。开发库、开发账号和 Redis 逻辑库 1 继续供本地开发使用。Redis 复用已有认证，逻辑库与前缀不构成 ACL 权限隔离。
-
-实际凭据仅保存在服务器 `shared/.env.production`，权限为 `600`。应用镜像不包含 `.env`、证书、私钥和本地虚拟环境，使用 UID `10001` 运行，并启用只读根文件系统和日志轮转。
-
-`FORWARDED_ALLOW_IPS` 只信任现有 Nginx 的容器 IP。Nginx 容器重建后，如 IP 发生变化，应同步修改正式环境文件并使用 `docker compose up -d --force-recreate backend` 重建后端。
+当前版本由 `/opt/keeping-accounts/current/docker-compose.yml` 直接定义镜像和环境变量。该文件包含生产凭据，权限为 `600`。从下次源码发布起，按下述步骤恢复共享 `.env.production` 和版本目录结构。
 
 ## 常用运维命令
 
 ```powershell
-ssh z11
+ssh z236
 ```
 
-进入服务器后执行：
+进入 z236 后执行：
 
 ```bash
 cd /opt/keeping-accounts/current
@@ -48,50 +29,89 @@ docker compose exec -T backend python -m alembic current
 curl --fail https://mjzs.zf-yun.cn/api/v1/health
 ```
 
-健康检查返回 `{"status":"ok"}`。容器启动时检查 PostgreSQL 和 Redis，检查失败会退出；运行期间的 HTTP 健康检查仅确认应用可响应。`check_connections.py` 还会读写一个短期 Redis 探测 key 并立即清理。
+HTTP 健康检查返回 `{"status":"ok"}`。`check_connections.py` 另外检查 PostgreSQL 和 Redis，Redis 探测键会在验证后清理。
 
-## 更新后端
+## 发布服务端和 Web 管理端
 
-共享账本版本需要执行至 `0004_shared` 迁移，并在服务器环境文件配置独立随机的 `BOOK_INVITE_SECRET`（至少 32 字符，不复用开发密钥）。模型配置保持 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL=gpt-6-luna`、`LLM_API_MODE=responses` 和 `LLM_TIMEOUT_SECONDS=45`；推理强度在代码中固定为 `xhigh`。流式聊天单独配置 `CHAT_TIMEOUT_SECONDS=240`，Nginx 读取超时仍为 120 秒，通过每十秒心跳维持连接，并使用 `proxy_buffering off` 立即转发增量。使用本仓库的 Nginx 配置，有改动时检查后重载。密钥不放入部署包；迁移前先备份正式库和配置，保留旧镜像与版本目录。
+沿用原发布流程。在 Windows 构建 Web 静态文件，将它和后端源码打成部署包，上传到 z236，由 z236 执行 `docker compose build` 构建两个镜像。小程序单独发布。
 
-先在本机执行现有 pytest、Ruff 检查。每次更新创建新版本目录并保留旧镜像，避免覆盖正在运行的源码。以下在仓库根目录的 PowerShell 执行，仅打包部署所需文件：
+首次在 z236 执行源码发布前，在服务器上创建 `/opt/keeping-accounts/shared`（权限 `700`）。参照[环境配置示例](../.env.production.example)，把当前后端实际生效的应用环境变量保存在 `/opt/keeping-accounts/shared/.env.production`（权限 `600`），包括既有数据库、Redis、微信、模型、邀请和管理员配置。`ADMIN_ORIGIN` 保持 `https://mjzs.zf-yun.cn`，`FORWARDED_ALLOW_IPS` 使用上述 z236 容器地址。含 `$` 的值用单引号包裹。该文件只在服务器上维护。
+
+在本地仓库根目录执行统一检查后，使用 PowerShell 打包、上传：
 
 ```powershell
+.\scripts\check.ps1 -Build
 $release = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
-New-Item -ItemType Directory -Force output | Out-Null
-tar --exclude=__pycache__ --exclude=*.pyc -czf output/backend.tar.gz -C backend app alembic alembic.ini check_connections.py requirements.txt Dockerfile .dockerignore docker-compose.yml .env.production.example deploy docs README.md
+$previousFeatures = $env:VITE_ADMIN_ACCOUNT_FEATURES
+$env:VITE_ADMIN_ACCOUNT_FEATURES = 'true'
+try { .\scripts\package-release.ps1 -Release $release }
+finally { $env:VITE_ADMIN_ACCOUNT_FEATURES = $previousFeatures }
+$releaseDir = "/opt/keeping-accounts/releases/$release"
+ssh z236 "umask 077; mkdir '$releaseDir'"
+if ($LASTEXITCODE -ne 0) { throw '创建远端版本目录失败。' }
+scp "output/moji-$release.tar.gz" "output/moji-$release.tar.gz.sha256" "z236:$releaseDir/"
+if ($LASTEXITCODE -ne 0) { throw '上传部署包失败。' }
 $release
-ssh z11 "mkdir -p /opt/keeping-accounts/releases/$release"
-scp output/backend.tar.gz "z11:/opt/keeping-accounts/releases/$release/backend.tar.gz"
+ssh z236
 ```
 
-随后 SSH 登录，设置 `release` 为上一步显示的版本号，再执行：
+在 z236 上将 `release` 设为上一步输出的版本号。发布包自带仓库的 Compose 配置，通过同目录的 override 把 `app_net` 映射到 z236 的 `moji_net`：
 
 ```bash
-set -eu
-release=<版本号>
-cd /opt/keeping-accounts/releases/"$release"
-tar -xzf backend.tar.gz
-rm backend.tar.gz
-ln -s /opt/keeping-accounts/shared/.env.production .env.production
-printf 'IMAGE_TAG=%s\n' "$release" > .env
+set -euo pipefail
+umask 077
+release='<本次版本号>'
+base=/opt/keeping-accounts
+previous=$(readlink -f "$base/current")
+cd "$base/releases/$release"
+sha256sum --check "moji-$release.tar.gz.sha256"
+tar -xzf "moji-$release.tar.gz"
+test -s "$base/shared/.env.production"
+ln -s "$base/shared/.env.production" backend/.env.production
+printf 'IMAGE_TAG=%s\nADMIN_IMAGE_TAG=%s\n' "$release" "$release" > .env
+cat > docker-compose.override.yml <<'YAML'
+networks:
+  app_net:
+    name: moji_net
+YAML
 docker compose config --quiet
-docker compose build --pull
-docker compose run --rm --no-deps -T backend python -m alembic upgrade head </dev/null
-docker compose up -d --wait --wait-timeout 90
-curl --fail https://mjzs.zf-yun.cn/api/v1/health
-ln -sfn /opt/keeping-accounts/releases/"$release" /opt/keeping-accounts/current
+docker network inspect moji_net >/dev/null
+docker compose build
 ```
 
-Compose 中的重启策略会在 Docker 重启后恢复服务。数据库迁移在启动服务前显式执行，应用启动本身不建表。涉及已有数据的迁移应先备份正式库并评估旧版本兼容性；不要通过删除数据库卷来更新应用。
+核对新版本的迁移链和回退兼容性。备份生产数据库及配置，再迁移并启动新容器：
 
-如新版本异常，进入上一版本目录，执行 `docker compose up -d --wait` 并把 `current` 链接指回上一版本。数据库迁移是否需要回退应单独判断，避免盲目执行 `alembic downgrade`。首次部署没有可回退的旧应用版本。
+```bash
+backup="$base/shared/backups/$release"
+mkdir -p "$base/shared/backups"
+mkdir "$backup"
+printf '%s\n' "$previous" > "$backup/previous-release"
+install -m 600 "$previous/docker-compose.yml" "$backup/previous-compose.yml"
+install -m 600 "$base/shared/.env.production" "$backup/env.production"
+install -m 600 /opt/nginx/conf.d/mjzs.zf-yun.cn.conf "$backup/nginx.conf"
+docker exec postgres16 sh -c 'pg_dump -U "${POSTGRES_USER:-postgres}" -Fc keeping_accounts_prod' > "$backup/database.dump"
+docker exec -i postgres16 pg_restore --list < "$backup/database.dump" > "$backup/database-list.txt"
+docker compose run --rm --no-deps -T backend python -m alembic upgrade head
+docker compose up -d --no-build --wait --wait-timeout 120
+docker compose exec -T backend python check_connections.py
+docker compose exec -T backend python -m alembic current
+curl --fail --silent --show-error https://mjzs.zf-yun.cn/api/v1/health
+curl --fail --silent --show-error https://mjzs.zf-yun.cn/ | grep -F 'id="app"'
+curl --fail --silent --show-error https://mjzs.zf-yun.cn/users | grep -F 'id="app"'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://mjzs.zf-yun.cn/prod-api/auth/me)" = 401
+```
 
-## HTTPS 证书
+确认健康检查返回 `{"status":"ok"}`，并按 [Web 验收步骤](web-admin.md#发布)完成验证后，将 `current` 切到新目录：
 
-当前使用用户提供的三段完整证书链及配套 ECC 私钥，证书域名为 `mjzs.zf-yun.cn`。有效期截止 **2027-01-22 06:59:59（北京时间）**，本部署不自动续期。
+```bash
+ln -sfn "$base/releases/$release" "$base/current"
+```
 
-续期时替换 `/opt/nginx/cert/mjzs.zf-yun.cn/` 中的证书和私钥，同步更新 `shared/tls/` 副本。私钥保持 `600`，然后校验并平滑重载：
+如需回退，进入 `previous-release` 记录的目录，执行 `docker compose up -d --no-build --wait --wait-timeout 120`，复核公网后把 `current` 指回该目录。数据库迁移是否需要回退应单独判断。仓库中的 `deploy-release.sh` 和 `update-release.sh` 对应旧版初始化与指定版本迁移。
+
+## 公共 Nginx 与 HTTPS
+
+站点配置位于 `/opt/nginx/conf.d/mjzs.zf-yun.cn.conf`，证书和私钥位于 `/opt/nginx/cert/mjzs.zf-yun.cn/`。当前证书有效期至 **2027-01-22 06:59:59（北京时间）**。发布源码和镜像时沿用现网 Nginx 配置。确需改动代理或更新证书时，备份现网文件并校验后平滑重载：
 
 ```bash
 docker exec nginx-web nginx -t
@@ -101,6 +121,4 @@ curl --fail https://mjzs.zf-yun.cn/api/v1/health
 
 ## 小程序接入
 
-将 `https://mjzs.zf-yun.cn` 添加到微信公众平台的小程序服务器域名中的 request 合法域名。前端通过 `uni.getAccountInfoSync()` 识别运行版本，仅 `develop` 开发版使用本地开发地址，默认 `http://127.0.0.1:8000`；`trial` 体验版、`release` 正式版及未知版本均连接正式域名。版本信息缺失、读取失败或非微信平台默认按开发版处理。前端无需 `.env`，直接在 `frontend/common/config.ts` 的 `DEV_BASE_URL` 与 `PROD_BASE_URL` 中调整地址并重新编译。真实微信登录仍需小程序调用 `wx.login` 获取一次性 code，无法用固定 code 完成真实登录验证。
-
-正式后端现已包含微信认证、个人及共享账本、账单、预算、邀请与成员管理、操作记录、账本生命周期、智能记账和聊天分析接口，模型为 `gpt-6-luna`，推理强度固定为 `xhigh`。本次没有上传或发布微信小程序代码；小程序端需重新编译上传体验版或正式版，再完成两个微信账号的分享验收。
+微信公众平台的 request 合法域名为 `https://mjzs.zf-yun.cn`。体验版和正式版通过该域名访问 `/api/v1`，真机开发地址在 [`frontend/common/config.ts`](../../frontend/common/config.ts) 中配置。小程序发布和真机验收仍在微信开发者工具中单独进行。

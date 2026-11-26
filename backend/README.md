@@ -12,7 +12,7 @@
 
 最新正式后端为 [`20261107T125401Z`](docs/releases/20261107T125401Z.md)，新增月预算卡片轻量汇总接口，替代卡片原先四个完整预算查询；已有接口兼容保留。正式库仍为 `0009_budget_deletion`，未增加索引或迁移，线上验收通过；前端卡片需新版小程序配合使用。
 
-正式服务使用 Docker Compose 部署到 z11，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
+正式服务使用 Docker Compose 部署到 z236，通过 `https://mjzs.zf-yun.cn` 访问，复用公共 Nginx 处理 HTTPS。源码包上传后在 z236 构建镜像。部署配置、更新和运维方法见[部署说明](docs/deployment.md)。
 
 Web 管理端提供独立管理员登录、平台概览、用户与账本只读查询、账号设置及登录日志，管理 API 前缀为 `/prod-api`。Vue 3 + Element Plus 前端位于仓库 `admin/`，与后端分别构建和部署，不影响小程序 `/api/v1`。管理员初始化、接口与双服务发布见 [Web 管理端说明](docs/web-admin.md)。
 
@@ -108,7 +108,7 @@ backend/
 
 ## PostgreSQL、Redis 与迁移
 
-复用 z11 的现有 `postgres16` 和 `redis6` 容器，不额外部署或重启数据库服务。本机连接配置已于 2026-10-24 写入 `backend/.env`，真实密码不写入示例或提交到 Git。
+本地开发复用 z11 的现有 `postgres16` 和 `redis6` 容器，不额外部署或重启数据库服务。本机连接配置已于 2026-10-24 写入 `backend/.env`，真实密码不写入示例或提交到 Git。
 
 - PostgreSQL：直连 `47.251.103.11:15432`，数据库为 `keeping_accounts_dev`，专用账号为 `keeping_accounts_dev_app`。账号不是超级用户，已获得开发库连接及 `public` schema 的使用和建表权限，供后续 Alembic 迁移使用。
 - Redis：直连 `47.251.103.11:16379`，复用现有密码认证，开发使用逻辑库 **1** 和 `moji:dev:` 前缀。前缀是应用命名约定；当前使用现有 Redis 默认账号，不是 Redis ACL 权限隔离。

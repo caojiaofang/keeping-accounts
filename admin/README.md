@@ -1,6 +1,6 @@
 # 墨记 Web 管理端
 
-独立的 Vue 3 + TypeScript + Vite + Element Plus 管理端，使用真实 FastAPI 接口。正式页面位于 `https://mjzs.zf-yun.cn`，管理 API 前缀为 `/prod-api`，小程序继续使用原有 `/api/v1`。
+独立的 Vue 3 + TypeScript + Vite + Element Plus 管理端，使用真实 FastAPI 接口。正式管理端部署在 z236，页面位于 `https://mjzs.zf-yun.cn`，管理 API 前缀为 `/prod-api`，小程序继续使用原有 `/api/v1`。
 
 后台服务端与正式页面已于 2026-11-06 更新至 [`20261106T115227Z`](../backend/docs/releases/20261106T115227Z.md)，正式库已迁移至 `0006_budget`，账号设置与登录日志已启用。原管理员账号密码保留，旧会话需重新登录。
 

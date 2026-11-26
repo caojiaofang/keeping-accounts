@@ -7,8 +7,8 @@
 - 前端：uni-app + Vue 3 + TypeScript + Pinia，使用 HBuilderX 开发。
 - Web 管理端：Vue 3 + Element Plus + TypeScript + Vite，独立构建与部署。
 - 后端：Python + FastAPI。
-- 数据库：PostgreSQL，复用 z11 服务器上的现有服务，开发库为 `keeping_accounts_dev`，正式库为 `keeping_accounts_prod`，两个库均已创建。
-- 缓存与临时状态：Redis，复用 z11 上的现有服务。
+- 数据库：PostgreSQL。开发使用 z11 的 `keeping_accounts_dev`，正式使用 z236 的 `keeping_accounts_prod`。
+- 缓存与临时状态：Redis。开发使用 z11 的逻辑库 1，正式使用 z236 的逻辑库 2。
 - 大模型：由后端调用配置的 sub2api 中转站。
 - 微信小程序 AppID：`wx0f90babab478b2b6`。
 
@@ -22,6 +22,10 @@ keeping-accounts/
 ├── docs/               # 功能需求与设计说明
 └── 项目方案说明.md      # 技术选型、功能范围和开发约定
 ```
+
+## 正式部署
+
+服务端和 Web 管理端部署在 `z236`，公网入口为 `https://mjzs.zf-yun.cn`。本地打包源码和 Web 静态产物，上传到 z236 后构建 Docker 镜像。详见[正式部署说明](backend/docs/deployment.md)。
 
 ## 当前进度
 
