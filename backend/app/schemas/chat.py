@@ -25,7 +25,15 @@ class SendMessage(LedgerSchema):
 class QueryPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal[
-        "overview", "details", "compare", "large", "advice", "clarify", "record", "unsupported"
+        "overview",
+        "details",
+        "compare",
+        "large",
+        "advice",
+        "general_advice",
+        "clarify",
+        "record",
+        "unsupported",
     ]
     month: str | None
     category_mode: Literal["all", "selected", "inherit"]

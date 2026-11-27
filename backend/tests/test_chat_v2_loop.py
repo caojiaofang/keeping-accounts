@@ -151,7 +151,7 @@ async def execute(
     *,
     mode="responses",
     tools="native",
-    text="本月花了多少",
+    text="帮我看看本月开销",
     cid=None,
     configure=None,
     **updates,

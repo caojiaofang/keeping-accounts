@@ -1,4 +1,4 @@
-"""从本轮后端事实生成回答；模型自由正文只作重点提示，不作为消费结论。"""
+"""从本轮事实生成统计正文，另外校验模型的消费建议。"""
 
 import asyncio
 import re
@@ -11,9 +11,10 @@ from pydantic import ValidationError
 from app.core.errors import ServiceError
 from app.schemas.chat_v2 import AnswerPreviewV2, SendMessageV2, ToolResult, validate_fact_references
 from app.services.analysis import CATEGORIES, yuan
+from app.services.chat_guidance import prepare_guidance, validate_guidance
 from app.services.chat_v2_context import ContextDraft
 from app.services.chat_v2_loop import ChatLoopV2, LoopOutcomeV2, fingerprint
-from app.services.chat_v2_suggestions import make_suggestions
+from app.services.chat_v2_suggestions import conversation_suggestions, make_suggestions
 
 REFERENCE = re.compile(r"\{\{([A-Za-z][A-Za-z0-9_.-]{0,95})\}\}")
 CHINESE_NUMBER = re.compile(
@@ -234,17 +235,35 @@ class AnswerServiceV2:
         state = await self.loop._current(
             outcome.draft.conversation_id, outcome.draft.expected_version
         )
+        if outcome.action == "budget_trial":
+            preview = AnswerPreviewV2(answer=outcome.answer_template, completeness="complete")
+            await self.store.validate_preview(outcome.draft, body, preview)
+            return PreparedAnswerV2(
+                outcome.draft, preview, outcome.model_requests, outcome.tool_calls, outcome.deadline
+            )
         try:
             cards, facts = collect_results(outcome.tool_results)
         except (ValidationError, ValueError):
             raise ServiceError(502, "回答事实不完整，请重新查询") from None
         missing = list(outcome.missing)
-        if outcome.action != "clarify":
+        advice = None
+        follow_ups = outcome.follow_ups
+        if outcome.action == "advice":
+            try:
+                advice = prepare_guidance(outcome.answer_template)
+            except ServiceError as error:
+                if cards:
+                    missing.append(error.detail + "，已保留账单统计")
+                else:
+                    advice = "你最想优先照顾哪一点，比如省钱、省时间，还是更容易坚持？"
+                    follow_ups = ()
+        elif outcome.action != "clarify":
             try:
                 render_fact_template(outcome.answer_template, facts)
             except ServiceError as error:
                 missing.append(error.detail + "，已使用后端事实说明")
-        selected = select_cards(cards, outcome.answer_template, body.text)
+        template = "" if outcome.action == "advice" else outcome.answer_template
+        selected = select_cards(cards, template, body.text)
         primary_call = selected[0].id.split(".")[0] if selected else None
         primary_tool = next(
             (result.name for result in outcome.tool_results if result.call_id == primary_call), None
@@ -252,7 +271,7 @@ class AnswerServiceV2:
         if (
             selected
             and primary_tool != "get_entry"
-            and outcome.action == "answer"
+            and outcome.action in {"answer", "advice"}
             and not same_filters(selected[0].filters, outcome.draft.context.filters)
         ):
             raise ServiceError(409, "本轮主统计与讨论筛选不一致，请明确条件后重新查询")
@@ -279,11 +298,15 @@ class AnswerServiceV2:
             )
         paragraphs = [card_text(card, facts) for card in selected[:2]]
         if outcome.action == "clarify":
-            paragraphs = [
-                outcome.reference.detail
-                if outcome.reference and outcome.reference.status == "clarify"
-                else "请明确要查询的日期范围、收支类型或具体账单。"
-            ]
+            if outcome.reference and outcome.reference.status == "clarify":
+                paragraphs = [outcome.reference.detail]
+            else:
+                try:
+                    paragraphs = [validate_guidance(outcome.answer_template)]
+                except ServiceError:
+                    paragraphs = ["你想查哪段时间的花费，还是想聊聊怎么安排开支？"]
+        elif advice:
+            paragraphs = [advice, "\n账单依据", *paragraphs] if paragraphs else [advice]
         if outcome.action == "partial" or missing:
             paragraphs.insert(0, "本轮分析未全部完成，以下仅为已验证的查询结果。")
         notices = list(
@@ -312,9 +335,9 @@ class AnswerServiceV2:
             for fid in card.fact_ids
             if facts[fid].metric == "count"
         )
-        suggestions = (
+        bill_suggestions = (
             []
-            if outcome.action == "clarify"
+            if not selected or outcome.action == "clarify"
             else make_suggestions(
                 body.id,
                 selected,
@@ -327,6 +350,11 @@ class AnswerServiceV2:
                 and draft.context.previous_range is not None,
             )
         )
+        advice_suggestions = (
+            conversation_suggestions(body.id, follow_ups, question=body.text, advice=advice)
+            if advice and not missing
+            else []
+        )
         # 只携带本次所用工具的事实，不能把之前对话中的同名 q1 当成本轮事实。
         used_calls = {fid.split(".")[0] for card in selected for fid in card.fact_ids}
         preview = AnswerPreviewV2(
@@ -336,7 +364,7 @@ class AnswerServiceV2:
             or (["查询未全部完成"] if outcome.action == "partial" else []),
             cards=shown,
             fact_refs=[fact for fact in facts.values() if fact.source_call_id in used_calls],
-            suggestions=suggestions,
+            suggestions=(advice_suggestions + bill_suggestions)[:3],
         )
         await self.store.validate_preview(draft, body, preview)
         await self.loop._current(state.conversation_id, state.version)

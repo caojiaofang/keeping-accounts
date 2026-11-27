@@ -71,7 +71,7 @@ class ChatServiceV2:
                         raise ServiceError(409, "此会话已有一百轮问答，请开始新对话")
                     await self._rate_limit()
                     if emit:
-                        await emit("status", {"text": "正在查询并核对账单…"})
+                        await emit("status", {"text": "正在准备回答…"})
                     ready = await self.answer.run(conversation_id, body)
                     if ready.preview.completeness == "partial":
                         ready.preview.suggestions = []

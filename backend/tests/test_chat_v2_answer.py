@@ -53,7 +53,8 @@ SCOPED_PLAN = {
 }
 
 
-def test_primary_query_cannot_save_context_with_different_keywords(context_data):
+@pytest.mark.parametrize("ending", [ANSWER, {"action": "advice", "text": "可以先核对常点的外卖。"}])
+def test_primary_query_cannot_save_context_with_different_keywords(context_data, ending):
     async def exercise():
         with pytest.raises(ServiceError, match="主统计与讨论筛选不一致") as error:
             await prepare(
@@ -61,7 +62,7 @@ def test_primary_query_cannot_save_context_with_different_keywords(context_data)
                 [
                     SCOPED_PLAN,
                     tool(filters={**FILTERS, "keywords": {"include": ["奶茶", "咖啡"]}}),
-                    ANSWER,
+                    ending,
                 ],
             )
         assert error.value.status_code == 409
@@ -120,7 +121,7 @@ def test_cleared_keywords_are_authoritative_without_conflicting_old_context(cont
 
 
 async def prepare(
-    data, steps=None, *, text="最近七天花了多少", mode="responses", tools="native", cid=None
+    data, steps=None, *, text="查下最近七天的支出合计", mode="responses", tools="native", cid=None
 ):
     state = await create(data) if cid is None else await data.store.load(cid)
     settings = configured(data, mode=mode, tools=tools)
@@ -193,6 +194,129 @@ def test_model_events_and_saving_guarantees_are_not_published(context_data):
         assert ready.preview.completeness == "complete"
         assert all(word not in ready.preview.answer for word in ("失恋", "报复", "一定能", "方案"))
         assert "¥475.01" in ready.preview.answer
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "text, valid",
+    [
+        ("可以先固定不点外卖的日子，忙的时候换成家里常备的简餐。", True),
+        ("照做每月就能省五百元。", False),
+        ("可以减少 {{q1.expense.total}} 的开销。", False),
+    ],
+)
+def test_advice_is_shown_alongside_verified_totals_and_rejects_unverified_numbers(
+    context_data, text, valid
+):
+    async def exercise():
+        ready, _, _ = await prepare(
+            context_data,
+            [
+                SCOPED_PLAN,
+                tool(),
+                {"action": "advice", "text": text, "followUps": ["加班时怎么少点外卖？"]},
+            ],
+            text="看看最近七天的开支，有什么可以调整？",
+        )
+        assert "¥475.01" in ready.preview.answer and "6 笔" in ready.preview.answer
+        assert ready.preview.answer.startswith(text + "\n\n账单依据\n") is valid
+        if valid:
+            assert ready.preview.suggestions[0].text == "加班时怎么少点外卖？"
+            assert ready.preview.suggestions[0].reference is None
+            assert DETAILS in {suggestion.text for suggestion in ready.preview.suggestions}
+        assert ready.preview.completeness == ("complete" if valid else "partial")
+        assert bool(ready.preview.missing) is not valid
+
+    asyncio.run(exercise())
+
+
+def test_quick_month_overview_shows_category_cards(context_data):
+    async def exercise():
+        ready, _, script = await prepare(
+            context_data,
+            [AssertionError("快捷汇总没有模型请求")],
+            text="这个月的花费主要集中在哪？",
+        )
+        assert ready.model_requests == 0 and ready.tool_calls == 1 and not script.requests
+        assert ready.preview.completeness == "complete"
+        assert ready.preview.cards[0].type == "summary"
+        assert {row.group_key for row in ready.preview.cards[0].rows} >= {"coffee", "food"}
+
+    asyncio.run(exercise())
+
+
+def test_quick_phrase_preserves_explicit_account_filter_via_normal_planning(context_data):
+    async def exercise():
+        state = await create(context_data)
+        draft = await context_data.store.revise(
+            state.conversation_id,
+            ContextPatch.model_validate(
+                {"edits": [{"field": "accounts", "op": "replace", "value": ["微信"]}]}
+            ),
+        )
+        await context_data.store.save_success(
+            draft,
+            SendMessageV2(id=uuid4(), text="只看微信账单"),
+            AnswerPreviewV2(answer="已保存筛选。", completeness="complete"),
+        )
+        ready, _, script = await prepare(
+            context_data,
+            [SCOPED_PLAN, tool(filters={**FILTERS, "accounts": ["微信"]}), ANSWER],
+            text="最近七天花了多少？",
+            cid=state.conversation_id,
+        )
+        assert len(script.requests) == ready.model_requests == 3
+        assert ready.draft.context.filters.accounts == ["微信"]
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "plan",
+    [
+        {**PLAN, "directAdvice": "可以保证省下三百元。"},
+        {**PLAN, "patch": {"reset": True, "edits": []}, "directAdvice": "可以先准备简餐。"},
+    ],
+)
+def test_invalid_direct_advice_continues_through_normal_model_response(context_data, plan):
+    async def exercise():
+        advice = "可以给忙的时候准备容易加热的简餐。"
+        ready, _, script = await prepare(
+            context_data,
+            [plan, {"action": "advice", "text": advice}],
+            text="工作日很忙，怎么少点外卖？",
+        )
+        assert ready.preview.answer == advice and ready.preview.completeness == "complete"
+        assert len(script.requests) == ready.model_requests == 2 and ready.tool_calls == 0
+
+    asyncio.run(exercise())
+
+
+def test_numbered_advice_keeps_only_verified_sentences_without_an_extra_request(context_data):
+    async def exercise():
+        draft = "1. 下班忙的时候可以吃提前备好的简餐。\n2. 每月肯定能省五百元。"
+        ready, _, script = await prepare(
+            context_data,
+            [{**PLAN, "directAdvice": draft}],
+            text="工作日很忙，怎么少点外卖？",
+        )
+        assert ready.preview.answer == "下班忙的时候可以吃提前备好的简餐。"
+        assert ready.preview.completeness == "complete" and not ready.preview.fact_refs
+        assert len(script.requests) == ready.model_requests == 1
+
+    asyncio.run(exercise())
+
+
+def test_unusable_pure_advice_asks_a_clarifying_question_without_suggesting_actions(context_data):
+    async def exercise():
+        ready, _, _ = await prepare(
+            context_data,
+            [PLAN, {"action": "advice", "text": "保证省五百元。", "followUps": ["如何省下更多？"]}],
+            text="工作日很忙，怎么少点外卖？",
+        )
+        assert ready.preview.answer.endswith("还是更容易坚持？")
+        assert not ready.preview.suggestions and not ready.preview.fact_refs
 
     asyncio.run(exercise())
 

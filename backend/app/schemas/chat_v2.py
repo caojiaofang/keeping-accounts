@@ -15,12 +15,14 @@ from pydantic import (
     model_validator,
 )
 
+from app.schemas.budget import BudgetMoney
 from app.schemas.chat import SendMessage
 from app.schemas.ledger import MAX_CENTS, LedgerSchema
 
 ToolName = Literal["summarize_entries", "search_entries", "compare_periods", "get_entry"]
 GroupBy = Literal["category", "date", "account", "creator"]
 FactId = Annotated[str, Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_.-]{0,95}$")]
+FollowUpDrafts = Annotated[list[str], Field(max_length=2)]
 
 
 class DateRange(LedgerSchema):
@@ -172,9 +174,10 @@ ToolCall = Annotated[
 class ToolDecision(LedgerSchema):
     """结构化循环与原生调用归一化后的单步结果。"""
 
-    action: Literal["tool", "answer", "clarify"]
+    action: Literal["tool", "answer", "advice", "clarify"]
     call: ToolCall | None = None
     text: Annotated[str, Field(max_length=2500)] | None = None
+    follow_ups: FollowUpDrafts = Field(default_factory=list)
 
     @model_validator(mode="after")
     def consistent(self):
@@ -333,6 +336,14 @@ class ChatContextV2(LedgerSchema):
     summary_through_sequence: int = Field(default=0, strict=True, ge=0)
 
 
+class BudgetTrialV2(LedgerSchema):
+    """只保存在对话轮次内部，记录用户提供的试算金额。"""
+
+    topic: str = Field(default="", max_length=32)
+    budget: BudgetMoney | None = None
+    spent: BudgetMoney | None = None
+
+
 ContextField = Literal[
     "dateRange",
     "entryType",
@@ -419,11 +430,13 @@ class ReferenceResolution(LedgerSchema):
 
 
 class ContextPlanV2(LedgerSchema):
-    """模型只提出编辑与引用请求，实际来源和账单权限由服务端核对。"""
+    """模型提出范围编辑、引用请求，或无需查询账单的建议草稿。"""
 
     patch: ContextPatch
     reference: ReferenceRequest | None = None
     reference_action: Literal["inspect", "exclude"] | None = None
+    direct_advice: Annotated[str, Field(max_length=800)] | None = None
+    follow_ups: FollowUpDrafts = Field(default_factory=list)
 
     @model_validator(mode="after")
     def paired_reference(self):
@@ -433,8 +446,9 @@ class ContextPlanV2(LedgerSchema):
 
 
 class FinishDecisionV2(LedgerSchema):
-    action: Literal["answer", "clarify"]
+    action: Literal["answer", "advice", "clarify"]
     text: str = Field(min_length=1, max_length=2500)
+    follow_ups: FollowUpDrafts = Field(default_factory=list)
 
 
 class Suggestion(LedgerSchema):

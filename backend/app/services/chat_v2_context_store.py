@@ -14,6 +14,7 @@ from app.models.chat import ChatConversation, ChatTurn
 from app.models.ledger import Book, LedgerEntry
 from app.schemas.chat_v2 import (
     AnswerPreviewV2,
+    BudgetTrialV2,
     ChatContextV2,
     ContextPatch,
     ConversationResponseV2,
@@ -47,6 +48,7 @@ from app.services.chat_v2_suggestions import (
     EXCLUDE,
     TEXTS,
     category_target,
+    is_conversation_question,
     suggestion_plan,
 )
 from app.services.ledger import LedgerService
@@ -187,6 +189,15 @@ class ContextStoreV2:
             recent = tuple(
                 self._turn(row, conversation.month, legacy=protocol == 1) for row in reversed(rows)
             )
+            trial = None
+            if protocol == 2 and recent and recent[-1].completeness == "complete":
+                data = (rows[0].result or {}).get("budgetTrial")
+                if data is not None:
+                    try:
+                        trial = BudgetTrialV2.model_validate(data)
+                    except ValidationError:
+                        # 单轮试算金额不能影响既有聊天与历史账单卡片的读取。
+                        pass
             await self.ledger.require_book(conversation.book_id)
             return ContextState(
                 conversation.id,
@@ -197,6 +208,7 @@ class ContextStoreV2:
                 protocol,
                 context,
                 recent,
+                trial,
             )
 
     async def for_model(self, conversation_id):
@@ -476,6 +488,15 @@ class ContextStoreV2:
                 )
                 if result.rowcount != 1:
                     raise ServiceError(409, "对话已在其他请求更新，请重新读取后继续")
+                turn_result = {
+                    "schemaVersion": 2,
+                    "payload": preview.model_dump(mode="json", by_alias=True),
+                    "request": {
+                        "suggestionId": str(body.suggestion_id) if body.suggestion_id else None
+                    },
+                }
+                if draft.budget_trial is not None and not partial:
+                    turn_result["budgetTrial"] = draft.budget_trial.model_dump(mode="json")
                 self.ledger.session.add(
                     ChatTurn(
                         id=body.id,
@@ -483,15 +504,7 @@ class ContextStoreV2:
                         sequence=sequence,
                         text=body.text,
                         answer=preview.answer,
-                        result={
-                            "schemaVersion": 2,
-                            "payload": preview.model_dump(mode="json", by_alias=True),
-                            "request": {
-                                "suggestionId": str(body.suggestion_id)
-                                if body.suggestion_id
-                                else None
-                            },
-                        },
+                        result=turn_result,
                         context=context.model_dump(mode="json", by_alias=True),
                         created_at=now,
                     )
@@ -551,13 +564,15 @@ class ContextStoreV2:
         )
         suggestion_ids = set()
         for suggestion in preview.suggestions:
-            if (
-                suggestion.source_turn_id != turn_id
-                or suggestion.id in suggestion_ids
-                or suggestion.text not in TEXTS
-            ):
+            if suggestion.source_turn_id != turn_id or suggestion.id in suggestion_ids:
                 raise ServiceError(409, "建议来源或内容不正确，请重新生成")
             suggestion_ids.add(suggestion.id)
+            if suggestion.text not in TEXTS:
+                if suggestion.reference is not None or not is_conversation_question(
+                    suggestion.text
+                ):
+                    raise ServiceError(409, "建议来源或内容不正确，请重新生成")
+                continue
             card, facts = await self._suggestion_card(
                 conversation, suggestion, turn_id, preview, context
             )
@@ -619,6 +634,10 @@ class ContextStoreV2:
                     turn.context,
                     check_card_entries=False,
                 )
+                if suggestion.text not in TEXTS:
+                    # 聊天追问只提交原文，下一轮按用户提问重新规划。
+                    await self.ledger.require_book(conversation.book_id)
+                    return None
                 card, facts = await self._suggestion_card(
                     conversation, suggestion, turn.id, turn, turn.context
                 )

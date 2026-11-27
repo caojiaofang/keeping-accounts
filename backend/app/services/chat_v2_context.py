@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.schemas.chat_v2 import (
+    BudgetTrialV2,
     ChatContextV2,
     ContextPatch,
     DateRange,
@@ -32,6 +33,7 @@ class ContextState:
     protocol: int
     context: ChatContextV2
     recent_turns: tuple[TurnResponseV2, ...]
+    budget_trial: BudgetTrialV2 | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,7 @@ class ContextDraft:
     expected_version: int
     context: ChatContextV2
     notices: tuple[str, ...]
+    budget_trial: BudgetTrialV2 | None = None
 
 
 def initial_context(month: str, *, today: date, max_days=366):

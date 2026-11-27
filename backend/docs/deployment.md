@@ -2,7 +2,7 @@
 
 正式服务端和 Web 管理端部署在 `z236`（`60.205.105.236`）。公网入口为 `https://mjzs.zf-yun.cn`，根路径提供管理页面，管理 API 使用 `/prod-api`，小程序 API 使用 `/api/v1`。
 
-当前 `current` 指向 `/opt/keeping-accounts/releases/20261116T073206Z`。后端镜像为 `moji-backend:20261116T073206Z`，Web 镜像为 `moji-admin:20261106T121956Z`，正式库已迁移至 `0011_savings_assistant`。迁移前的发布记录见[后端发布](releases/20261116T073206Z.md)和 [Web 发布](releases/20261106T121956Z.md)。
+当前 `current` 指向 `/opt/keeping-accounts/releases/20261127T013828Z`。后端镜像为 `moji-backend:20261127T013828Z`，Web 镜像为 `moji-admin:20261106T121956Z`，正式库使用 `0011_savings_assistant`。见[后端发布](releases/20261127T013828Z.md)和 [Web 发布](releases/20261106T121956Z.md)。
 
 ## 服务器目录与运行方式
 
@@ -10,7 +10,7 @@ Compose 项目名为 `moji`。后端、Web、`postgres16`、`redis6` 和公共 N
 
 正式后端使用 PostgreSQL 数据库 `keeping_accounts_prod`、Redis 逻辑库 2 和 `moji:prod:` 前缀。`FORWARDED_ALLOW_IPS` 当前为 `172.30.236.2`，即公共 Nginx 在 `moji_net` 上的地址。Nginx 容器 IP 变化时需同步修改该值并重建后端容器。
 
-当前版本由 `/opt/keeping-accounts/current/docker-compose.yml` 直接定义镜像和环境变量。该文件包含生产凭据，权限为 `600`。从下次源码发布起，按下述步骤恢复共享 `.env.production` 和版本目录结构。
+当前版本从同目录的 `.env` 读取镜像标签，从 `backend/.env.production` 加载后端运行配置。后者软链接到 `/opt/keeping-accounts/shared/.env.production`，权限为 `600`。上一版的内联 Compose 配置保存在私有版本目录和发布备份中。
 
 ## 常用运维命令
 
@@ -35,7 +35,7 @@ HTTP 健康检查返回 `{"status":"ok"}`。`check_connections.py` 另外检查 
 
 沿用原发布流程。在 Windows 构建 Web 静态文件，将它和后端源码打成部署包，上传到 z236，由 z236 执行 `docker compose build` 构建两个镜像。小程序单独发布。
 
-首次在 z236 执行源码发布前，在服务器上创建 `/opt/keeping-accounts/shared`（权限 `700`）。参照[环境配置示例](../.env.production.example)，把当前后端实际生效的应用环境变量保存在 `/opt/keeping-accounts/shared/.env.production`（权限 `600`），包括既有数据库、Redis、微信、模型、邀请和管理员配置。`ADMIN_ORIGIN` 保持 `https://mjzs.zf-yun.cn`，`FORWARDED_ALLOW_IPS` 使用上述 z236 容器地址。含 `$` 的值用单引号包裹。该文件只在服务器上维护。
+发布时使用 z236 上的 `/opt/keeping-accounts/shared/.env.production`，权限为 `600`。其中保存数据库、Redis、微信、模型、邀请和管理员等应用配置。`ADMIN_ORIGIN` 使用 `https://mjzs.zf-yun.cn`，`FORWARDED_ALLOW_IPS` 使用上述 z236 容器地址。按现有格式用单引号包裹含 `$` 的值。该文件只在服务器上维护。见[环境配置示例](../.env.production.example)。
 
 在本地仓库根目录执行统一检查后，使用 PowerShell 打包、上传：
 

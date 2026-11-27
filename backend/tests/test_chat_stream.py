@@ -89,7 +89,7 @@ def make_service(monkeypatch, explanation_failure=None):
     session = SimpleNamespace(
         rollback=AsyncMock(),
         scalars=AsyncMock(return_value=[]),
-        execute=AsyncMock(return_value=SimpleNamespace(rowcount=1)),
+        execute=AsyncMock(return_value=SimpleNamespace(rowcount=1, all=lambda: [])),
         flush=AsyncMock(),
         commit=AsyncMock(),
         add=Mock(),
@@ -184,6 +184,42 @@ def test_card_and_sentences_arrive_before_completion_and_fallback_is_saved(monke
         assert events[-1]["data"]["result"]["text"] == answer
         service.ledger.session.commit.assert_awaited_once()
         assert service.redis.set.call_args.kwargs["ex"] >= 60
+
+    asyncio.run(run())
+
+
+def test_general_advice_uses_prior_turn_and_saves_without_bill_query(monkeypatch):
+    async def run():
+        service, _, _, _ = make_service(monkeypatch)
+        previous = SimpleNamespace(text="想少点外卖", answer="可以给忙的日子准备简餐。")
+        service.ledger.session.execute.side_effect = [
+            SimpleNamespace(all=lambda: [previous]),
+            SimpleNamespace(rowcount=1),
+        ]
+        plan = QueryPlan(
+            action="general_advice",
+            month=None,
+            category_mode="inherit",
+            category_id=None,
+            entry_type=None,
+            threshold=None,
+            comparison=None,
+            clarification=None,
+        )
+        advice = "可以备些容易加热的饭菜，遇到加班就不用临时决定吃什么。"
+        service.query_model = AsyncMock(side_effect=[plan.model_dump(), {"text": advice}])
+        queries = Mock(side_effect=AssertionError("一般消费建议不应该查询账单"))
+        monkeypatch.setattr(chat_module, "AnalysisQueries", queries)
+        frames = [
+            e async for e in service.events(uuid4(), SendMessage(id=uuid4(), text="简餐怎么准备？"))
+        ]
+        assert frames[-1]["event"] == "done"
+        assert frames[-1]["data"]["answer"] == advice
+        assert frames[-1]["data"]["result"] is None
+        request = json.loads(service.query_model.call_args.args[1])
+        assert request["recentTurns"] == [{"question": previous.text, "answer": previous.answer}]
+        service.ledger.session.commit.assert_awaited_once()
+        queries.assert_not_called()
 
     asyncio.run(run())
 

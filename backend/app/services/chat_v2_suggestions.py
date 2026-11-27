@@ -14,6 +14,7 @@ from app.schemas.chat_v2 import (
 from app.schemas.ledger import EXPENSE_CATEGORIES, INCOME_CATEGORIES
 from app.services.analysis import CATEGORIES as CATEGORY_LABELS
 from app.services.analysis_v2 import resolve_comparison_range
+from app.services.chat_guidance import validate_guidance
 
 DETAILS = "查看匹配账单明细"
 CATEGORIES = "按分类分开看看"
@@ -23,6 +24,35 @@ EXCLUDE = "排除这笔再比较"
 ENTRY = "查看这笔账单"
 WIDEN = "清空备注关键词再查"
 TEXTS = {DETAILS, CATEGORIES, COMPARE, CONTRIBUTION, EXCLUDE, ENTRY, WIDEN}
+
+
+def is_conversation_question(text: str) -> bool:
+    if (
+        text in TEXTS
+        or not 4 <= len(text) <= 60
+        or len(text.splitlines()) != 1
+        or not text.endswith(("？", "?"))
+    ):
+        return False
+    try:
+        return validate_guidance(text) == text
+    except ServiceError:
+        return False
+
+
+def conversation_suggestions(turn_id, drafts, *, question, advice):
+    seen = {question.rstrip("？?")}
+    suggestions = []
+    for draft in drafts:
+        text = draft.strip()
+        key = text.rstrip("？?")
+        if key not in seen and is_conversation_question(text):
+            seen.add(key)
+            suggestions.append(Suggestion(id=uuid4(), text=text, source_turn_id=turn_id))
+    fallback = "可以举个日常的例子吗？"
+    if not suggestions and not advice.endswith(("？", "?")) and fallback[:-1] not in seen:
+        suggestions.append(Suggestion(id=uuid4(), text=fallback, source_turn_id=turn_id))
+    return suggestions
 
 
 def category_target(card, facts):

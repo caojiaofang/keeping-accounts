@@ -14,7 +14,7 @@ from test_analysis_v2_queries import data as data
 from test_chat_v2_answer import SCOPED_PLAN
 from test_chat_v2_context_store import StoreSession, create, save
 from test_chat_v2_context_store import context_data as context_data
-from test_chat_v2_loop import ANSWER, FILTERS, Script, configured, tool
+from test_chat_v2_loop import ANSWER, FILTERS, PLAN, Script, configured, tool
 
 from app.api.deps import get_redis
 from app.api.v1.ledger import get_ledger_service
@@ -25,6 +25,7 @@ from app.main import create_app
 from app.models.chat import ChatConversation, ChatTurn
 from app.models.shared import BookMember
 from app.schemas.chat_v2 import AnswerPreviewV2, ContextPatch, ReferenceRequest, SendMessageV2
+from app.services import chat_v2
 from app.services.chat import UNLOCK, ChatService
 from app.services.chat_v2_context_store import ContextStoreV2
 from app.services.ledger import LedgerService
@@ -183,6 +184,127 @@ def test_duplicate_with_changed_text_or_suggestion_is_rejected(context_data):
                 )[-1]
                 assert result["event"] == "error" and result["data"]["status"] == 409
             assert len(script.requests) == 3
+
+    asyncio.run(exercise())
+
+
+def test_advice_without_query_can_continue_the_conversation_without_changing_filters(context_data):
+    async def exercise():
+        advice = "可以先分出每月必须付的账单，再给外卖和购物留可调整的额度。"
+        followup = "可以把外卖从餐饮里单独设个上限，给忙的日子留出余量。"
+        followup_question = "外卖的额度怎么留？"
+        steps = [
+            SCOPED_PLAN,
+            tool(),
+            ANSWER,
+            {**PLAN, "directAdvice": advice, "followUps": [followup_question, "能省100元吗？"]},
+            {**PLAN, "directAdvice": followup},
+        ]
+        async with scenario(context_data, steps) as (client, script, _, _):
+            cid = await new_conversation(client, context_data)
+            path = f"{BASE}/conversations/{cid}/messages/stream"
+            bill = events(await client.post(path, json=message()))[-1]["data"]
+            first = events(await client.post(path, json=message("每月预算怎么安排比较合适？")))[-1]
+            assert first["event"] == "done"
+            suggestions = first["data"]["suggestions"]
+            assert [item["text"] for item in suggestions] == [followup_question]
+            assert suggestions[0]["reference"] is None
+            click = {**message(followup_question), "suggestionId": suggestions[0]["id"]}
+            tampered = events(await client.post(path, json={**click, "text": "被篡改的追问？"}))[-1]
+            assert tampered["event"] == "error" and tampered["data"]["status"] == 409
+            second = events(await client.post(path, json=click))[-1]
+            assert second["event"] == "done"
+            assert events(await client.post(path, json=click))[-1] == second
+            for turn, expected in [(first["data"], advice), (second["data"], followup)]:
+                assert turn["answer"] == expected and turn["completeness"] == "complete"
+                assert turn["cards"] == turn["factRefs"] == []
+                assert turn["context"]["filters"] == bill["context"]["filters"]
+                assert turn["context"]["sources"] == bill["context"]["sources"]
+            assert len(script.requests) == 5
+            history_input = json.loads(script.requests[-1]["input"][1]["content"])["history"]
+            assert history_input["recentTurns"][-1]["answer"] == advice
+            history = (await client.get(f"{BASE}/conversations/{cid}")).json()
+            assert [turn["answer"] for turn in history["turns"][-2:]] == [advice, followup]
+
+    asyncio.run(exercise())
+
+
+def test_quick_expense_query_streams_and_saves_verified_facts_without_model(
+    context_data, monkeypatch
+):
+    monkeypatch.setattr(chat_v2, "business_today", lambda: date(2026, 10, 27))
+
+    async def exercise():
+        async with scenario(context_data) as (client, script, redis, _):
+            cid = await new_conversation(client, context_data)
+            path = f"{BASE}/conversations/{cid}/messages/stream"
+            body = message("本月餐饮花了多少？")
+            frames = events(await client.post(path, json=body))
+            assert frames[-1]["event"] == "done"
+            turn = frames[-1]["data"]
+            assert "¥30.00" in turn["answer"] and turn["completeness"] == "complete"
+            assert turn["context"]["filters"]["dateRange"] == {
+                "start": "2026-10-01",
+                "end": "2026-10-27",
+            }
+            assert turn["context"]["filters"]["categoryIds"] == ["food"]
+            assert any(
+                fact["value"] == 3000 for fact in turn["factRefs"] if fact["metric"] == "total"
+            )
+            assert events(await client.post(path, json=body))[-1] == frames[-1]
+            assert redis.set_calls == 1 and not script.requests
+
+    asyncio.run(exercise())
+
+
+def test_budget_trial_uses_only_user_inputs_and_can_be_completed_corrected_and_replayed(
+    context_data,
+):
+    async def exercise():
+        state = await create(context_data)
+        historical = await save(
+            context_data,
+            state.conversation_id,
+            [{"field": "accounts", "op": "replace", "value": ["微信"]}],
+        )
+        advice = {**PLAN, "directAdvice": "可以给忙的日子准备容易加热的简餐。"}
+        async with scenario(context_data, [advice]) as (client, script, _, _):
+            path = f"{BASE}/conversations/{state.conversation_id}/messages/stream"
+            first = message("外卖预算 600 元，还剩多少？")
+            filled = message("480 元")
+            corrected = message("那已花金额改成 680.25 元呢？")
+            for body, expected in [
+                (first, "已经花了多少"),
+                (filled, "还剩 ¥120.00"),
+                (corrected, "超支 ¥80.25"),
+            ]:
+                frames = events(await client.post(path, json=body))
+                assert frames[-1]["event"] == "done"
+                turn = frames[-1]["data"]
+                assert "按你提供的金额" in turn["answer"] and expected in turn["answer"]
+                assert turn["completeness"] == "complete"
+                assert turn["factRefs"] == turn["cards"] == []
+                assert turn["context"]["filters"] == historical.context.filters.model_dump(
+                    mode="json", by_alias=True
+                )
+                assert "budgetTrial" not in turn
+            assert not script.requests
+            replay = events(await client.post(path, json=corrected))
+            assert [frame["event"] for frame in replay] == ["status", "done"]
+            assert replay[-1] == frames[-1]
+            history = (await client.get(f"{BASE}/conversations/{state.conversation_id}")).json()
+            assert [turn["id"] for turn in history["turns"][-3:]] == [
+                first["id"],
+                filled["id"],
+                corrected["id"],
+            ]
+
+            normal = message("工作日很忙，怎么少点外卖？")
+            assert events(await client.post(path, json=normal))[-1]["event"] == "done"
+            fresh = message("预算改成 700 元")
+            turn = events(await client.post(path, json=fresh))[-1]["data"]
+            assert "已经花了多少" in turn["answer"] and "680.25" not in turn["answer"]
+            assert len(script.requests) == 1
 
     asyncio.run(exercise())
 
