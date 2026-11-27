@@ -1,10 +1,14 @@
-import { API_BASE_URL, ApiError, notifyUnauthorized } from '@/common/api/request'
+import { API_BASE_URL, ApiError, networkError, notifyUnauthorized } from '@/common/api/request'
 import type { ChatStreamEvent, ChatTurn } from '@/common/types/chat'
 import type { ChatStreamEventV2, ChatTurnV2 } from '@/common/types/chat-v2'
 import { decodeEventV2 } from '@/common/api/chat-v2-codec'
 
 export interface ChatStreamTask { promise: Promise<ChatTurn>; cancel: () => void }
 export interface ChatStreamTaskV2 { promise: Promise<ChatTurnV2>; cancel: () => void }
+
+export class ChatStreamInterrupted extends Error {
+  constructor(message = '回答连接已中断，可重新读取或重试这条消息') { super(message) }
+}
 
 // 微信运行环境不保证提供 TextDecoder；保留跨分片的 UTF-8 字节。
 export class StreamDecoder {
@@ -28,7 +32,7 @@ export class StreamDecoder {
       index += size
     }
     this.pending = bytes.slice(index)
-    if (final && this.pending.length) throw new Error('流式响应意外中断，请重新读取对话')
+    if (final && this.pending.length) throw new ChatStreamInterrupted()
     return text
   }
 }
@@ -97,14 +101,14 @@ function stream<E extends { event: string; data: unknown }, T>(path: string, tok
     const push = (value: ArrayBuffer) => { if (!settled) { try { parser.push(decoder.decode(value)) } catch (error) { fail(error) } } }
     const finish = () => {
       try { parser.push(decoder.decode(new ArrayBuffer(0), true)) } catch (error) { fail(error) }
-      if (!settled) fail(new Error('回答连接已中断，请重新读取或重试这条消息'))
+      if (!settled) fail(new ChatStreamInterrupted())
     }
 
     // #ifdef H5
     if (typeof window !== 'undefined' && typeof fetch === 'function') {
       const controller = new AbortController()
       abort = () => controller.abort()
-      const timer = setTimeout(abort, 300000)
+      const timer = setTimeout(() => fail(new ChatStreamInterrupted('接收回答超时，可重新读取或重试这条消息')), 300000)
       void (async () => {
         try {
           const response = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify(data), signal: controller.signal })
@@ -123,7 +127,7 @@ function stream<E extends { event: string; data: unknown }, T>(path: string, tok
             }
           } finally { if (settled) await reader.cancel().catch(() => {}); reader.releaseLock() }
           finish()
-        } catch (error) { fail(error) }
+        } catch (error) { fail(error instanceof TypeError ? new ChatStreamInterrupted() : error) }
         finally { clearTimeout(timer) }
       })()
       return
@@ -153,7 +157,11 @@ function stream<E extends { event: string; data: unknown }, T>(path: string, tok
         }
         finish()
       },
-      fail() { fail(new Error('回答连接已中断，请检查网络后重新读取或重试')) },
+      fail(cause) {
+        const error = networkError(cause.errMsg || '')
+        if (error.networkFailure === 'domain' || error.networkFailure === 'tls') fail(error)
+        else fail(new ChatStreamInterrupted(error.networkFailure === 'timeout' ? '接收回答超时，可重新读取或重试这条消息' : undefined))
+      },
     })
     abort = () => task.abort()
     const chunkTask = task as typeof task & { onChunkReceived?: (listener: (chunk: { data: ArrayBuffer }) => void) => void }

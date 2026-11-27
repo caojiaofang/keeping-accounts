@@ -3,9 +3,10 @@ import { defineStore } from 'pinia'
 import { useLedgerStore } from '@/store/ledger'
 import { newId } from '@/common/utils/id'
 import { ApiError } from '@/common/api/request'
+import { ChatStreamInterrupted } from '@/common/api/chat-stream'
 import { parseCapabilitiesV2, parseConversationV2, parseSummaryV2 } from '@/common/api/chat-v2-codec'
 import type { ChatContext, ChatTurn, Conversation, ConversationSummary } from '@/common/types/chat'
-import type { AnswerPreviewV2, ChatContextV2, ChatTurnV2, ConversationSummaryV2, SuggestionV2 } from '@/common/types/chat-v2'
+import type { AnswerPreviewV2, ChatContextV2, ChatTurnV2, ConversationSummaryV2, ConversationV2, SuggestionV2 } from '@/common/types/chat-v2'
 
 type Protocol = 'unknown' | 'v1' | 'v2'
 type Turn = ChatTurn | ChatTurnV2
@@ -229,7 +230,14 @@ export const useChatStore = defineStore('chat', () => {
         created = true
       }
       if (!current(version)) return false
-      const endpoint = `/conversations/${encodeURIComponent(conversationId.value)}/messages/stream`
+      const id = conversationId.value
+      const conversationPath = `/conversations/${encodeURIComponent(id)}`
+      const endpoint = `${conversationPath}/messages/stream`
+      const loadLatest = async () => {
+        const latest = parseConversationV2(await ledger.chatRequest<unknown>(`/v2${conversationPath}`))
+        if (latest.id !== id || latest.bookId !== bookId.value) throw new Error('当前会话范围不一致，请重新读取')
+        return latest
+      }
       const task = protocol.value === 'v2' ? ledger.streamChatV2(endpoint, message, event => {
         if (!current(version)) return
         if (event.event === 'status') progress.value = event.data.text
@@ -246,7 +254,20 @@ export const useChatStore = defineStore('chat', () => {
         if (event.event === 'delta') { preview.value ||= { answer: '' }; preview.value.answer += event.data.text }
       })
       cancelStream = task.cancel
-      const result = await task.promise
+      let latest: ConversationV2 | undefined
+      let result: Turn
+      try { result = await task.promise }
+      catch (cause) {
+        if (!current(version)) return false
+        if (protocol.value !== 'v2' || !(cause instanceof ChatStreamInterrupted)) throw cause
+        progress.value = '正在重新读取回答…'
+        // 回答可能已保存，按原消息 ID 从当前会话确认，避免再次调用模型。
+        latest = await loadLatest()
+        if (!current(version)) return false
+        const saved = latest.turns.find(turn => turn.id === message.id)
+        if (!saved) throw cause
+        result = saved
+      }
       if (!current(version)) return false
       if (result.id !== message.id || result.text !== message.text) throw new Error('回答与原消息不一致，请重新读取')
       turns.value = merge(turns.value, [result])
@@ -255,9 +276,8 @@ export const useChatStore = defineStore('chat', () => {
       if (protocol.value === 'v2') {
         // done 可能是旧消息的幂等重放；再次读取顶部权威状态，避免覆盖其他设备的新筛选。
         try {
-          const latest = parseConversationV2(await ledger.chatRequest<unknown>(path(`/conversations/${encodeURIComponent(conversationId.value)}`)))
+          latest ??= await loadLatest()
           if (!current(version)) return false
-          if (latest.id !== conversationId.value || latest.bookId !== bookId.value) throw new Error('当前会话范围不一致，请重新读取')
           const previousFirst = turns.value[0]?.sequence, latestFirst = latest.turns[0]?.sequence
           const prior = latestFirst ? turns.value.filter(turn => turn.sequence < latestFirst) : []
           const gap = !!latestFirst && prior.length > 0 && prior[prior.length - 1].sequence < latestFirst - 1

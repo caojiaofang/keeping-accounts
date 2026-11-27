@@ -18,6 +18,7 @@ const BASE = '/api/v1/assistant/v2'
 let identity, handler, capability, streamGate, transformFrame, persistMessages, partial, nextContext, aborts, calls, modelCalls, sequence
 const ok = data => ({ statusCode: 200, data: clone(data) })
 const fail = (statusCode, detail = '模拟服务错误') => ({ statusCode, data: { detail } })
+const isConversationRead = options => options.method !== 'POST' && new URL(options.url).pathname.startsWith(`${BASE}/conversations/`)
 function filters(start = '2026-10-21', end = '2026-10-27') {
   return { dateRange: { start, end }, entryType: 'expense', categoryIds: [], keywords: { include: [], mode: 'any', exclude: [] }, accounts: [], creatorIds: [], amountMin: null, amountMax: null, minInclusive: true, maxInclusive: true, weekdays: [], excludedEntryIds: [] }
 }
@@ -177,14 +178,15 @@ await check('部分完成消息保留缺失说明和成功上下文，不伪造�
   assert.equal(chat.turns.at(-1).completeness, 'partial'); assert.ok(chat.turns.at(-1).missing.length)
   assert.deepEqual(chat.contextV2, saved); assert.deepEqual(chat.suggestions, [])
 })
-await check('动态建议只发送已保存 ID，断流重试保留消息 ID、原文和建议 ID', async () => {
+await check('动态建议只发送已保存 ID，自动读取失败后重试保留原请求', async () => {
   const { chat } = await fresh(); await chat.send('汇总')
   const suggestion = clone(chat.suggestions[0]); const before = modelCalls
   streamGate = async () => { throw new Error('done lost') }
+  handler = options => isConversationRead(options) ? fail(503) : server(options)
   assert.equal(await chat.sendSuggestion(suggestion), false)
   const pending = clone(chat.pending); assert.equal(pending.suggestionId, suggestion.id); assert.ok(chat.preview)
   assert.equal(await chat.send(pending.text), false)
-  streamGate = undefined
+  streamGate = undefined; handler = server
   assert.equal(await chat.retry(), true)
   assert.equal(modelCalls, before + 1)
   const sent = calls.filter(c => c.path.endsWith('/messages/stream')).slice(-2)
@@ -199,11 +201,20 @@ await check('未保存预览中的建议不能执行，读取未找到消息时�
   assert.equal(await chat.read(chat.conversationId), true)
   assert.deepEqual(chat.pending, pending); assert.deepEqual(chat.preview, preview)
 })
-await check('重新读取恢复已提交消息并清理未确认预览，不重复生成', async () => {
-  const { chat } = await fresh(); streamGate = async () => { throw new Error('done lost') }
-  await chat.send('查询'); const count = modelCalls
-  assert.equal(await chat.read(chat.conversationId), true)
-  assert.equal(chat.pending, undefined); assert.equal(chat.preview, undefined); assert.equal(chat.turns.length, 1); assert.equal(modelCalls, count)
+await check('原生请求失败或流缺少 done 时自动读回已保存回答', async () => {
+  for (const failure of ['native', 'missing-done']) {
+    const { chat } = await fresh()
+    if (failure === 'native') streamGate = async () => { throw new Error('connection interrupted') }
+    else transformFrame = (event, data) => event === 'done' ? undefined : data
+
+    assert.equal(await chat.send('查询'), true)
+    const [message] = calls.filter(call => call.path.endsWith('/messages/stream'))
+    assert.equal(chat.turns[0].id, message.data.id)
+    assert.equal(chat.turns[0].answer, '已确认的餐饮🍜合计 ¥10.00。')
+    assert.equal(chat.pending, undefined); assert.equal(chat.preview, undefined); assert.equal(chat.error, '')
+    assert.equal(modelCalls, 1)
+    assert.equal(calls.filter(call => call.path === `${BASE}/conversations/${chat.conversationId}`).length, 1)
+  }
 })
 await check('历史允许跨入口月份，翻旧页以顶层权威上下文为准', async () => {
   const { chat } = await fresh(); await chat.send('当前对话')
@@ -218,11 +229,13 @@ await check('历史允许跨入口月份，翻旧页以顶层权威上下文为�
   assert.equal(chat.conversationId, cid); assert.equal(chat.contextV2.filters.dateRange.start, '2026-11-01')
 })
 await check('幂等重放旧 done 后重新获取权威范围，其他设备的新筛选不会被旧上下文覆盖', async () => {
-  const { chat } = await fresh(); streamGate = async () => { throw new Error('done lost') }; await chat.send('旧消息')
+  const { chat } = await fresh(); streamGate = async () => { throw new Error('done lost') }
+  handler = options => isConversationRead(options) ? fail(503) : server(options)
+  await chat.send('旧消息')
   const c = conversations.get(chat.conversationId)
   const other = { ...clone(c.turns[0]), id: randomUUID(), sequence: 2, text: '另一设备', suggestions: [], context: context(filters('2026-11-01', '2026-11-05')) }
   c.turns.push(other); c.context = clone(other.context); c.updatedAt += 100
-  streamGate = undefined; assert.equal(await chat.retry(), true)
+  streamGate = undefined; handler = server; assert.equal(await chat.retry(), true)
   assert.equal(chat.contextV2.filters.dateRange.start, '2026-11-01'); assert.equal(chat.turns.length, 2); assert.equal(modelCalls, 1)
 })
 await check('切到记账模式或离页取消流，迟到 done 不写回且 pending 可恢复', async () => {
@@ -302,17 +315,19 @@ await check('旧请求的迟到能力响应不能为退出账号重新选择协�
 })
 await check('done 后权威范围读取失败会保留已保存结果，并阻止带不确定范围继续发送', async () => {
   const { chat } = await fresh()
-  handler = options => /\/conversations\/[a-f0-9-]+$/.test(new URL(options.url).pathname) && options.method !== 'POST' ? fail(503) : server(options)
+  handler = options => isConversationRead(options) ? fail(503) : server(options)
   assert.equal(await chat.send('查询'), true); assert.equal(chat.turns.length, 1); assert.equal(chat.pending, undefined)
   assert.equal(chat.ready, false); assert.equal(await chat.send('不能继续猜条件'), false)
   handler = server; assert.equal(await chat.read(chat.conversationId), true); assert.equal(chat.ready, true)
 })
 await check('其他设备产生超过一页的新消息时，恢复连续分页而不遗失中间历史', async () => {
-  const { chat } = await fresh(); streamGate = async () => { throw new Error('done lost') }; await chat.send('旧消息')
+  const { chat } = await fresh(); streamGate = async () => { throw new Error('done lost') }
+  handler = options => isConversationRead(options) ? fail(503) : server(options)
+  await chat.send('旧消息')
   const c = conversations.get(chat.conversationId), original = clone(c.turns[0])
   for (let i = 2; i <= 26; i++) c.turns.push({ ...clone(original), id: randomUUID(), sequence: i, suggestions: [], text: `其他消息${i}` })
   c.updatedAt += 100
-  streamGate = undefined; assert.equal(await chat.retry(), true)
+  streamGate = undefined; handler = server; assert.equal(await chat.retry(), true)
   assert.equal(chat.turns[0].sequence, 7); assert.equal(chat.hasMore, true)
   await chat.loadEarlier()
   assert.deepEqual(chat.turns.map(turn => turn.sequence), Array.from({ length: 26 }, (_, i) => i + 1))

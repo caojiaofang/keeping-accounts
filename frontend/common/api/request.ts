@@ -8,7 +8,7 @@ export class ApiError extends Error {
   constructor(message: string, public readonly status = 0, public readonly networkFailure?: NetworkFailure) { super(message) }
 }
 
-function networkError(errMsg: string): ApiError {
+export function networkError(errMsg: string): ApiError {
   if (/url not in domain list|domain.*not.*(?:allowed|authorized)|不在.*合法域名/i.test(errMsg)) {
     return new ApiError('服务连接配置异常，请稍后重试', 0, 'domain')
   }
